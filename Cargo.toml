@@ -1,0 +1,8 @@
+[package]
+name = "rustmap"
+version = "0.1.0"
+authors = ["Gjum <code.gjum@gmail.com>"]
+
+[dependencies]
+lodepng = "0.11"
+zip = "0.1"
