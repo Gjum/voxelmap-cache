@@ -22,9 +22,16 @@ fn xz_from_zip_path(zip_path: &PathBuf) -> (i32, i32) {
     return (x, z);
 }
 
-fn heightmap(column: &[u8; 17]) -> (u8, u8, u8, u8) {
+fn rgba(r: u8, g: u8, b: u8, a: u8) -> u32 {
+    (r as u32)
+    | ((g as u32) << 8)
+    | ((b as u32) << 16)
+    | ((a as u32) << 24);
+}
+
+fn heightmap(column: &[u8; 17]) -> u32 {
     let h = column[0];
-    (h, h, h, 255)
+    rgba(h, h, h, 255)
 }
 
 fn do_work(zip_path: &PathBuf) -> Result<(), io::Error> {
@@ -36,8 +43,7 @@ fn do_work(zip_path: &PathBuf) -> Result<(), io::Error> {
 
     for i in 0..IMG_PIXELS {
         try!(data_file.read(column));
-        let (r, g, b, a) = heightmap(column);
-        pixbuf[i] = ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+        pixbuf[i] = heightmap(column);
     }
 
     let (x, z) = xz_from_zip_path(&zip_path);
@@ -67,7 +73,8 @@ fn main() {
         let thread_tasks = tasks.clone();
         workers.push(thread::spawn(move || {
             loop {
-                let task = { // extra scope to limit lock duration
+                let task = {
+                    // extra scope to limit lock duration
                     let mut tasks = thread_tasks.lock().unwrap();
                     tasks.pop_front()
                 };
@@ -75,15 +82,32 @@ fn main() {
                     None => break,
                     Some(zip_path) => {
                         match do_work(&zip_path) {
-                            Ok(_) => {},
-                            Err(e) => println!("worker {} failed at {:?} {}",
-                                worker_nr, zip_path, e),
+                            Ok(_) => {}
+                            Err(e) => {
+                                println!("worker {} failed at {:?} {}", worker_nr, zip_path, e)
+                            }
                         }
-                    },
+                    }
                 };
             }
         }));
     }
+
+    thread::spawn(move || {
+        loop {
+            std::thread::sleep_ms(1000);
+            let regions_left = {
+                // extra scope to limit lock duration
+                let tasks = tasks.lock().unwrap();
+                tasks.len()
+            };
+            if regions_left == 0 {
+                break;
+            }
+            let regions_done = total_regions - regions_left;
+            println!("{}/{} processed", regions_done, total_regions);
+        }
+    });
 
     for worker in workers.into_iter() {
         worker.join().unwrap();
