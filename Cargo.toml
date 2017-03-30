@@ -3,7 +3,12 @@ name = "voxelmap_cache"
 version = "0.1.0"
 authors = ["Gjum <code.gjum@gmail.com>"]
 
+[[bin]]
+name = "render"
+
 [dependencies]
+docopt = "~0.6"
 lodepng = "0.11"
+rustc-serialize = "0.3"
 threadpool = "1.3.2"
 zip = "0.1"
