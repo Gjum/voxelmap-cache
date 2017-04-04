@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use threadpool::ThreadPool;
 
+pub mod biomes;
 pub mod colorizer;
 pub mod processor;
 

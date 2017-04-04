@@ -37,7 +37,7 @@ impl Args {
         } else if self.cmd_light {
             Colorizer::Light
         } else if self.cmd_biome {
-            Colorizer::Biome { todo_colors: 0 }
+            Colorizer::Biome
         } else if self.cmd_height {
             Colorizer::Height
         } else if self.cmd_terrain {

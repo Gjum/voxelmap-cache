@@ -1,3 +1,12 @@
+use biomes::BIOME_COLOR_TABLE;
+
+pub fn biome(column: &[u8; 17]) -> u32 {
+    if *column == [0_u8; 17] {
+        return 0;
+    }
+    let b = column[16];
+    BIOME_COLOR_TABLE[b as usize]
+}
 
 pub fn simple(column: &[u8; 17]) -> u32 {
     if *column == [0_u8; 17] {
@@ -10,22 +19,9 @@ pub fn simple(column: &[u8; 17]) -> u32 {
     return rgba(231, 228, 220, 255); // land: #e7e4dc
 }
 
-static BIOME_COLORS: [u32; 256] = [0x88ff88ff; 256];
-
-pub fn biome(column: &[u8; 17]) -> u32 {
+pub fn light(column: &[u8; 17]) -> u32 {
     if *column == [0_u8; 17] {
         return 0;
-    }
-    let b = column[16];
-    BIOME_COLORS[b as usize]
-}
-
-pub fn lightmap(column: &[u8; 17]) -> u32 {
-    if *column == [0_u8; 17] {
-        return 0;
-    }
-    if column[0] < 50 {
-        return rgba(0, 0, 0, 255);
     }
     let bl = column[3] & 0xf;
     rgba(bl * 17, bl * 17, bl * 17, 255)
@@ -41,11 +37,11 @@ pub fn heightmap_grayscale(column: &[u8; 17]) -> u32 {
 
 const SEA_LEVEL: u32 = 95;
 
-fn heightmap(column: &[u8; 17]) -> u32 {
+fn height(column: &[u8; 17]) -> u32 {
     let h = column[0] as u32; // height
 
     if h == 0 { // unpopulated
-        return rgba(0, 0, 0, 0);
+        return 0;
     }
 
     // TODO look at biome too
@@ -70,14 +66,14 @@ fn heightmap(column: &[u8; 17]) -> u32 {
 
 fn rgba(r: u8, g: u8, b: u8, a: u8) -> u32 {
     (r as u32)
-    | ((g as u32) << 8)
-    | ((b as u32) << 16)
-    | ((a as u32) << 24)
+        | ((g as u32) << 8)
+        | ((b as u32) << 16)
+        | ((a as u32) << 24)
 }
 
 #[derive(Debug)]
 pub enum Colorizer {
-    Biome { todo_colors: u8 },
+    Biome,
     Height,
     Light,
     Simple,
@@ -88,10 +84,10 @@ pub enum Colorizer {
 impl Colorizer {
     pub fn column_color_fn(&self) -> Box<Fn(&[u8; 17]) -> u32> {
         Box::new(match *self {
+            Colorizer::Biome => biome,
+            Colorizer::Height => height,
+            Colorizer::Light => light,
             Colorizer::Simple => simple,
-            Colorizer::Light => lightmap,
-            Colorizer::Biome {..} => biome,
-            Colorizer::Height => heightmap,
             Colorizer::Terrain => simple, // XXX
             Colorizer::Unknown => simple, // XXX
         })
