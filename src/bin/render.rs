@@ -5,6 +5,7 @@ extern crate rustc_serialize;
 extern crate voxelmap_cache;
 
 use docopt::Docopt;
+use std::time::Instant;
 use voxelmap_cache::render_parallelized;
 use voxelmap_cache::*;
 use voxelmap_cache::colorizer::*;
@@ -63,6 +64,8 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
     let verbose = !args.flag_quiet;
 
+    if verbose { println!("Finding regions from {} ...", args.arg_cache); }
+
     match get_regions(args.arg_cache.as_ref()) {
         Err(e) => print!("{:?}", e),
         Ok(regions) => {
@@ -70,9 +73,11 @@ fn main() {
             let processor = args.get_processor();
 
             if verbose {
-                println!("Rendering {} regions from {} to {} with {:?}",
-                         regions.len(), args.arg_cache, args.arg_output, colorizer);
+                println!("Rendering {} regions to {} with {:?}",
+                         regions.len(), args.arg_output, colorizer);
             }
+
+            let start_time = Instant::now();
 
             render_parallelized(
                 processor,
@@ -81,6 +86,11 @@ fn main() {
                 args.arg_threads.unwrap_or(4),
                 verbose,
             );
+
+            if verbose {
+                let time_total = start_time.elapsed().as_secs();
+                println!("Done after {}:{:02}", time_total / 60, time_total % 60);
+            }
         },
     }
 }

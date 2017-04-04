@@ -27,7 +27,9 @@ pub fn render_parallelized(
     let pool = ThreadPool::new(num_threads);
     let (tx, rx) = channel();
 
-    let start_time = Instant::now();
+    processor.pre_process();
+
+    let start_time_regions = Instant::now();
 
     for work_item in &regions {
         let tx = tx.clone();
@@ -39,7 +41,7 @@ pub fn render_parallelized(
         });
     }
 
-    let mut next_msg_elapsed = 1; // for progress meter
+    let mut next_msg_elapsed = 3; // for progress meter
     let total_work = regions.len();
     for work_done in 0..total_work {
         match rx.recv().unwrap() {
@@ -49,20 +51,22 @@ pub fn render_parallelized(
             }
         }
 
-        if verbose { print_progress(work_done, total_work, start_time, &mut next_msg_elapsed); }
+        if verbose { print_progress(work_done, total_work, start_time_regions, &mut next_msg_elapsed); }
     }
 
     if verbose {
-        let time_per_work_item = start_time.elapsed() / total_work as u32;
+        let time_total = start_time_regions.elapsed();
+        let total_min = time_total.as_secs() / 60;
+        let total_sec = time_total.as_secs() % 60;
+        let time_per_work_item = time_total / total_work as u32;
         let region_sec = time_per_work_item.as_secs();
         let region_ms = time_per_work_item.subsec_nanos() / 1_000_000;
-        println!("Took {}.{:03?} per region", region_sec, region_ms);
-        println!("Post-processing...");
+        println!("Took {}:{:02} total, {}.{:03?} per region",
+                 total_min, total_sec, region_sec, region_ms);
+        println!("Post-processing ...");
     };
 
     processor.post_process();
-
-    if verbose { println!("Done."); }
 }
 
 fn render_region(zip_path: PathBuf, colorizer: &Colorizer) -> Result<(RegionPos, Box<RegionPixels>), String> {
@@ -123,7 +127,7 @@ fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_elaps
     if *next_msg_elapsed < elapsed {
         *next_msg_elapsed = elapsed;
     }
-    *next_msg_elapsed += 1;
+    *next_msg_elapsed += 3;
 
     let work_left = total - done;
     let sec_left = elapsed as usize * work_left / done;
