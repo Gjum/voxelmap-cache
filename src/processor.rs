@@ -28,9 +28,12 @@ impl Processor for TilesProcessor {
             .replace("{tile}", &(format!("{},{}", rx, rz)))
             .replace("{x}", &rx.to_string())
             .replace("{z}", &rz.to_string());
-        let dir = Path::new(&img_path).parent().unwrap();
-        fs::create_dir_all(dir).unwrap();
-        lodepng::encode32_file(&img_path, &region_pixels[..], REGION_WIDTH, REGION_WIDTH).unwrap();
+        let dir = Path::new(&img_path).parent()
+            .expect(&format!("Getting containing directory of tile {}", img_path));
+        fs::create_dir_all(dir)
+            .expect(&format!("Creating containing directory for tile {}", img_path));
+        lodepng::encode32_file(&img_path, &region_pixels[..], REGION_WIDTH, REGION_HEIGHT)
+            .expect(&format!("Encoding tile {}", img_path));
     }
 }
 
@@ -72,12 +75,15 @@ impl Processor for SingleImageProcessor {
     }
 
     fn pre_process(&mut self) {
-        let dir = Path::new(&self.img_path).parent().unwrap();
-        fs::create_dir_all(dir).unwrap();
+        let dir = Path::new(&self.img_path).parent()
+            .expect(&format!("Getting containing directory of {}", self.img_path));
+        fs::create_dir_all(dir)
+            .expect(&format!("Creating containing directory for {}", self.img_path));
     }
 
     fn post_process(&mut self) {
         println!("Saving image as {}", self.img_path);
-        lodepng::encode32_file(&self.img_path, &self.pixbuf[..], IMG_WIDTH, IMG_HEIGHT).unwrap();
+        lodepng::encode32_file(&self.img_path, &self.pixbuf[..], IMG_WIDTH, IMG_HEIGHT)
+            .expect(&format!("Encoding image {}", self.img_path));
     }
 }

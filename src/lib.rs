@@ -45,7 +45,9 @@ pub fn render_parallelized(
     let total_work = regions.len();
     for work_done in 0..total_work {
         match rx.recv().unwrap() {
-            Err(e) => { println!("ERROR {:?}", e) }
+            Err((region_pos, error)) => {
+                println!("Error rendering region {:?}: {:?}", region_pos, error);
+            }
             Ok((region_pos, region_pixels)) => {
                 processor.process_region(region_pos, region_pixels);
             }
@@ -69,26 +71,27 @@ pub fn render_parallelized(
     processor.post_process();
 }
 
-fn render_region(zip_path: PathBuf, colorizer: &Colorizer) -> Result<(RegionPos, Box<RegionPixels>), String> {
-    let (rx, rz) = try!(xz_from_zip_path(&zip_path).map_err(|e| e.to_string()));
+fn render_region(zip_path: PathBuf, colorizer: &Colorizer) -> Result<(RegionPos, Box<RegionPixels>), (RegionPos, String)> {
+    let region_pos = xz_from_zip_path(&zip_path)
+        .expect(&format!("Getting region position of {:?}", zip_path));
 
     let zip_file = try!(fs::File::open(&zip_path)
-        .map_err(|e| e.to_string()));
+        .map_err(|e| (region_pos, e.to_string())));
     let mut zip_archive = try!(zip::ZipArchive::new(zip_file)
-        .map_err(|e| e.to_string()));
+        .map_err(|e| (region_pos, e.to_string())));
     let mut data_file = try!(zip_archive.by_index(0)
-        .map_err(|e| e.to_string()));
+        .map_err(|e| (region_pos, e.to_string())));
 
     let mut pixbuf = Box::new([0_u32; REGION_BLOCKS]);
     let column = &mut [0; 17];
     let get_column_color = colorizer.column_color_fn();
 
     for i in 0..REGION_BLOCKS {
-        try!(data_file.read(column).map_err(|e| e.to_string()));
+        try!(data_file.read(column).map_err(|e| (region_pos, e.to_string())));
         pixbuf[i] = get_column_color(column);
     }
 
-    Ok(((rx, rz), pixbuf))
+    Ok((region_pos, pixbuf))
 }
 
 fn xz_from_zip_path(zip_path: &PathBuf) -> Result<(i32, i32), std::num::ParseIntError> {
@@ -100,18 +103,19 @@ fn xz_from_zip_path(zip_path: &PathBuf) -> Result<(i32, i32), std::num::ParseInt
     Ok((x, z))
 }
 
-pub fn get_regions(dir: &str) -> Result<LinkedList<PathBuf>, String> {
+pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
     let mut region_paths = LinkedList::new();
-    for zip_dir_entry in try!(fs::read_dir(dir).map_err(|e| e.to_string())) {
-        let zip_path = try!(zip_dir_entry.map_err(|e| e.to_string())).path();
+    for zip_dir_entry in fs::read_dir(dir).expect("Listing region files") {
+        let zip_path = zip_dir_entry.expect("Getting region directory entry").path();
         if xz_from_zip_path(&zip_path).is_ok() {
             region_paths.push_back(zip_path);
         } else if zip_path.to_string_lossy().ends_with("_chunk-times.gz") {
+            // ignore chunk timestamp info file
         } else {
             println!("Ignoring non-region file {:?}", &zip_path);
         }
     }
-    Ok(region_paths)
+    region_paths
 }
 
 fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_elapsed: &mut u64) {

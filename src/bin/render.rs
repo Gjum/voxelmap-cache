@@ -66,31 +66,27 @@ fn main() {
 
     if verbose { println!("Finding regions from {} ...", args.arg_cache); }
 
-    match get_regions(args.arg_cache.as_ref()) {
-        Err(e) => print!("{:?}", e),
-        Ok(regions) => {
-            let colorizer = args.get_colorizer();
-            let processor = args.get_processor();
+    let regions = get_regions(args.arg_cache.as_ref());
+    let colorizer = args.get_colorizer();
 
-            if verbose {
-                println!("Rendering {} regions to {} with {:?}",
-                         regions.len(), args.arg_output, colorizer);
-            }
+    if verbose {
+        println!("Rendering {} regions to {} with {:?}",
+                 regions.len(), args.arg_output, colorizer);
+    }
 
-            let start_time = Instant::now();
+    let processor = args.get_processor();
 
-            render_parallelized(
-                processor,
-                colorizer,
-                regions,
-                args.arg_threads.unwrap_or(4),
-                verbose,
-            );
+    let start_time = Instant::now();
+    render_parallelized(
+        processor,
+        colorizer,
+        regions,
+        args.arg_threads.unwrap_or(4),
+        verbose,
+    );
 
-            if verbose {
-                let time_total = start_time.elapsed().as_secs();
-                println!("Done after {}:{:02}", time_total / 60, time_total % 60);
-            }
-        },
+    if verbose {
+        let time_total = start_time.elapsed().as_secs();
+        println!("Done after {}:{:02}", time_total / 60, time_total % 60);
     }
 }
