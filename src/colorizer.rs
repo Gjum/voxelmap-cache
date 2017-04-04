@@ -14,9 +14,9 @@ pub fn simple(column: &[u8; 17]) -> u32 {
     }
     let b = column[0+2];
     if b == 8 || b == 9 {
-        return rgba(166, 197, 255, 255); // water: #a6c5ff
+        return rgb(166, 197, 255); // water: #a6c5ff
     }
-    return rgba(231, 228, 220, 255); // land: #e7e4dc
+    return rgb(231, 228, 220); // land: #e7e4dc
 }
 
 pub fn light(column: &[u8; 17]) -> u32 {
@@ -24,7 +24,7 @@ pub fn light(column: &[u8; 17]) -> u32 {
         return 0;
     }
     let bl = column[3] & 0xf;
-    rgba(bl * 17, bl * 17, bl * 17, 255)
+    rgb(bl * 17, bl * 17, bl * 17)
 }
 
 pub fn heightmap_grayscale(column: &[u8; 17]) -> u32 {
@@ -32,7 +32,7 @@ pub fn heightmap_grayscale(column: &[u8; 17]) -> u32 {
         return 0;
     }
     let h = column[0];
-    rgba(h, h, h, 255)
+    rgb(h, h, h)
 }
 
 const SEA_LEVEL: u32 = 95;
@@ -46,29 +46,30 @@ fn height(column: &[u8; 17]) -> u32 {
 
     // TODO look at biome too
     let b = column[2];
-    return if b != 9 && b != 8 { // land
+    if b != 9 && b != 8 { // land
         if h < SEA_LEVEL { // dug out
             let c = h * 255 / SEA_LEVEL;
-            rgba(0, c as u8, 0, 255)
+            rgb(0, c as u8, 0)
         } else { // normal terrain
             let c = (h - SEA_LEVEL) * 255 / (255 - SEA_LEVEL);
-            rgba(c as u8, 255, c as u8, 255)
+            rgb(c as u8, 255, c as u8)
         }
-    } else {
+    } else { // water
         let d = h - column[4] as u32; // depth
         if d > SEA_LEVEL {
-            return rgba(0, 0, 127, 255);
+            rgb(0, 0, 127)
+        } else {
+            let c = 255 - d * 255 / SEA_LEVEL;
+            rgb(0, c as u8, 255 - (c as u8) / 2)
         }
-        let c = 255 - d * 255 / SEA_LEVEL;
-        rgba(0, c as u8, 255 - (c as u8) / 2, 255)
     }
 }
 
-fn rgba(r: u8, g: u8, b: u8, a: u8) -> u32 {
-    (r as u32)
-        | ((g as u32) << 8)
+fn rgb(r: u8, g: u8, b: u8) -> u32 {
+    0xff000000
         | ((b as u32) << 16)
-        | ((a as u32) << 24)
+        | ((g as u32) << 8)
+        | (r as u32)
 }
 
 #[derive(Debug)]
