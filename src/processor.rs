@@ -50,7 +50,7 @@ const IMG_NORTH: i32 = -21 * REGION_HEIGHT as i32;
 impl SingleImageProcessor {
     pub fn new(img_pattern: &String) -> SingleImageProcessor {
         SingleImageProcessor {
-            pixbuf: Box::new([0_u32; IMG_WIDTH * IMG_HEIGHT]),
+            pixbuf: vec![0_u32; IMG_WIDTH * IMG_HEIGHT].into_boxed_slice(),
             img_path: SingleImageProcessor::replace_timestamp(img_pattern),
         }
     }
@@ -67,7 +67,7 @@ impl Processor for SingleImageProcessor {
         let x_off: i32 = rx * REGION_WIDTH as i32 - IMG_WEST;
         let z_off: i32 = rz * REGION_HEIGHT as i32 - IMG_NORTH;
         for (line_z, region_line) in region_pixels.chunks(REGION_WIDTH).enumerate() {
-            let img_line = (x_off + (z_off + line_z as i32)) as usize * IMG_WIDTH;
+            let img_line = (x_off + IMG_WIDTH as i32 * (z_off + line_z as i32)) as usize;
             let img_slice = &mut self.pixbuf[img_line..img_line + REGION_WIDTH];
             img_slice.copy_from_slice(region_line);
             // img_slice.clone_from_slice(region_line); // TODO compare speed of clone vs copy
