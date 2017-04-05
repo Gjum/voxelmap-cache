@@ -79,7 +79,6 @@ pub enum Colorizer {
     Light,
     Simple,
     Terrain,
-    Unknown,
 }
 
 impl Colorizer {
@@ -89,8 +88,7 @@ impl Colorizer {
             Colorizer::Height => height,
             Colorizer::Light => light,
             Colorizer::Simple => simple,
-            Colorizer::Terrain => simple, // XXX
-            Colorizer::Unknown => simple, // XXX
+            Colorizer::Terrain => unimplemented!(),
         })
     }
 }

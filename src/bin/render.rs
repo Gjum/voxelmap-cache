@@ -44,7 +44,7 @@ impl Args {
         } else if self.cmd_terrain {
             Colorizer::Terrain
         } else {
-            Colorizer::Unknown
+            panic!("Unknown colorizer selected")
         }
     }
 
