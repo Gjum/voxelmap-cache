@@ -1,3 +1,5 @@
+// Colors taken from https://raw.githubusercontent.com/skiphs/AMIDST/master/src/amidst/minecraft/Biome.java
+// Created using py/convert_biomes_amidst.py --download --rs
 pub const BIOME_COLOR_TABLE: [u32; 256] = [
 0xff700000,
 0xff60b38d,
