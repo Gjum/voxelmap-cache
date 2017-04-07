@@ -42,10 +42,10 @@ pub struct SingleImageProcessor {
     img_path: String,
 }
 
-const IMG_WIDTH: usize = 45 * REGION_WIDTH;
-const IMG_HEIGHT: usize = 45 * REGION_HEIGHT;
-const IMG_WEST: i32 = -21 * REGION_WIDTH as i32;
-const IMG_NORTH: i32 = -21 * REGION_HEIGHT as i32;
+const IMG_WIDTH: usize = 40 * REGION_WIDTH;
+const IMG_HEIGHT: usize = 40 * REGION_HEIGHT;
+const IMG_WEST: i32 = -20 * REGION_WIDTH as i32;
+const IMG_NORTH: i32 = -20 * REGION_HEIGHT as i32;
 
 impl SingleImageProcessor {
     pub fn new(img_pattern: &String) -> SingleImageProcessor {
