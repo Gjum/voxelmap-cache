@@ -1,6 +1,6 @@
 use biomes::BIOME_COLOR_TABLE;
 
-pub fn biome(column: &[u8; 17]) -> u32 {
+pub fn biome(column: &[u8]) -> u32 {
     if *column == [0_u8; 17] {
         return 0;
     }
@@ -8,7 +8,7 @@ pub fn biome(column: &[u8; 17]) -> u32 {
     BIOME_COLOR_TABLE[b as usize]
 }
 
-pub fn simple(column: &[u8; 17]) -> u32 {
+pub fn simple(column: &[u8]) -> u32 {
     if *column == [0_u8; 17] {
         return 0;
     }
@@ -19,7 +19,7 @@ pub fn simple(column: &[u8; 17]) -> u32 {
     return rgb(231, 228, 220); // land: #e7e4dc
 }
 
-pub fn light(column: &[u8; 17]) -> u32 {
+pub fn light(column: &[u8]) -> u32 {
     if *column == [0_u8; 17] {
         return 0;
     }
@@ -27,7 +27,7 @@ pub fn light(column: &[u8; 17]) -> u32 {
     rgb(bl * 17, bl * 17, bl * 17)
 }
 
-pub fn heightmap_grayscale(column: &[u8; 17]) -> u32 {
+pub fn heightmap_grayscale(column: &[u8]) -> u32 {
     if *column == [0_u8; 17] {
         return 0;
     }
@@ -37,7 +37,7 @@ pub fn heightmap_grayscale(column: &[u8; 17]) -> u32 {
 
 const SEA_LEVEL: u32 = 95;
 
-fn height(column: &[u8; 17]) -> u32 {
+fn height(column: &[u8]) -> u32 {
     if *column == [0_u8; 17] {
         return 0; // unpopulated
     }
@@ -86,7 +86,7 @@ pub enum Colorizer {
 }
 
 impl Colorizer {
-    pub fn column_color_fn(&self) -> Box<Fn(&[u8; 17]) -> u32> {
+    pub fn column_color_fn(&self) -> Box<Fn(&[u8]) -> u32> {
         Box::new(match *self {
             Colorizer::Biome => biome,
             Colorizer::Height => height,

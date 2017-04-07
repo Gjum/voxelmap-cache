@@ -70,7 +70,6 @@ impl Processor for SingleImageProcessor {
             let img_line = (x_off + IMG_WIDTH as i32 * (z_off + line_z as i32)) as usize;
             let img_slice = &mut self.pixbuf[img_line..img_line + REGION_WIDTH];
             img_slice.copy_from_slice(region_line);
-            // img_slice.clone_from_slice(region_line); // TODO compare speed of clone vs copy
         }
     }
 

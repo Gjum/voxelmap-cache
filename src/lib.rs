@@ -83,11 +83,12 @@ fn render_region(zip_path: PathBuf, colorizer: &Colorizer) -> Result<(RegionPos,
         .map_err(|e| (region_pos, e.to_string())));
 
     let mut pixbuf = Box::new([0_u32; REGION_BLOCKS]);
-    let column = &mut [0; 17];
+    let columns = &mut [0; 17*REGION_BLOCKS];
     let get_column_color = colorizer.column_color_fn();
 
-    for i in 0..REGION_BLOCKS {
-        try!(data_file.read(column).map_err(|e| (region_pos, e.to_string())));
+    try!(data_file.read(columns).map_err(|e| (region_pos, e.to_string())));
+
+    for (i, column) in columns.chunks(17).enumerate() {
         pixbuf[i] = get_column_color(column);
     }
 
