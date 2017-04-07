@@ -38,11 +38,15 @@ pub fn heightmap_grayscale(column: &[u8; 17]) -> u32 {
 const SEA_LEVEL: u32 = 95;
 
 fn height(column: &[u8; 17]) -> u32 {
-    let h = column[0] as u32; // height
-
-    if h == 0 { // unpopulated
-        return 0;
+    if *column == [0_u8; 17] {
+        return 0; // unpopulated
     }
+
+    // height
+    let h = match column[0] {
+        0 => 256, // wrapped around
+        h => h as u32,
+    };
 
     // TODO look at biome too
     let b = column[2];
