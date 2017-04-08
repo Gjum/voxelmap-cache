@@ -1,4 +1,5 @@
 """
+Combine terrain and light into night tiles.
 Example: python3 build_night.py /tiles/night/z0 /tiles/terrain/z0 /tiles/light/z0
 or, when using bash: python3 build_night.py /tiles/{night,terrain,light}/z0
 """
