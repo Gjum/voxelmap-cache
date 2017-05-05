@@ -1,7 +1,12 @@
 use biomes::BIOME_COLOR_TABLE;
 
+fn is_empty(column: &[u8]) -> bool {
+    return column[1] == 0 && column[2] == 0 // block is air
+        || column[0] > 0 && column[0] < 6; // inside bedrock (specific to Devoted)
+}
+
 pub fn biome(column: &[u8]) -> u32 {
-    if *column == [0_u8; 17] {
+    if is_empty(column) {
         return 0;
     }
     let b = column[16];
@@ -9,7 +14,7 @@ pub fn biome(column: &[u8]) -> u32 {
 }
 
 pub fn simple(column: &[u8]) -> u32 {
-    if *column == [0_u8; 17] {
+    if is_empty(column) {
         return 0;
     }
     let b = column[0+2];
@@ -20,7 +25,7 @@ pub fn simple(column: &[u8]) -> u32 {
 }
 
 pub fn light(column: &[u8]) -> u32 {
-    if *column == [0_u8; 17] {
+    if is_empty(column) {
         return 0;
     }
     let bl = column[3] & 0xf;
@@ -28,7 +33,7 @@ pub fn light(column: &[u8]) -> u32 {
 }
 
 pub fn heightmap_grayscale(column: &[u8]) -> u32 {
-    if *column == [0_u8; 17] {
+    if is_empty(column) {
         return 0;
     }
     let h = column[0];
@@ -38,7 +43,7 @@ pub fn heightmap_grayscale(column: &[u8]) -> u32 {
 const SEA_LEVEL: u32 = 95;
 
 fn height(column: &[u8]) -> u32 {
-    if *column == [0_u8; 17] {
+    if is_empty(column) {
         return 0; // unpopulated
     }
 
