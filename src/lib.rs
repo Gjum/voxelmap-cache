@@ -108,8 +108,14 @@ pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
     let mut region_paths = LinkedList::new();
     for zip_dir_entry in fs::read_dir(dir).expect("Listing region files") {
         let zip_path = zip_dir_entry.expect("Getting region directory entry").path();
-        if xz_from_zip_path(&zip_path).is_ok() {
-            region_paths.push_back(zip_path);
+        let xz_result = xz_from_zip_path(&zip_path);
+        if xz_result.is_ok() {
+            let (x, z) = xz_result.unwrap();
+            if -20 <= x && x < 20 && -20 <= z && z < 20 {
+                region_paths.push_back(zip_path);
+            } else {
+                println!("Ignoring region file outside world border: {:?}", &zip_path);
+            }
         } else if zip_path.to_string_lossy().ends_with("_chunk-times.gz") {
             // ignore chunk timestamp info file
         } else {
