@@ -10,7 +10,8 @@ With -f, removes them.
 import os, sys
 
 to_remove = []
-for f in os.listdir(sys.argv[1]):
+cleaned_dir = sys.argv[1]
+for f in os.listdir(cleaned_dir):
     region_pos, file_ending = f.rsplit('.', 1)
     if file_ending in ('zip', 'png', 'gz'):
         x, z = map(int, region_pos.split(',', 1))
@@ -20,7 +21,7 @@ for f in os.listdir(sys.argv[1]):
 if len(sys.argv) > 2 and sys.argv[2] == '-f':
     print('removing:', len(to_remove))
     for f in to_remove:
-        os.remove(f)
+        os.remove(cleaned_dir + '/' + f)
 else:
-    print(*to_remove)
+    print(*to_remove, sep='\n')
     print('total:', len(to_remove))
