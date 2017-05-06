@@ -42,11 +42,13 @@ pub fn heightmap_grayscale(column: &[u8]) -> u32 {
 
 const       BLACK: u32 = 0xff_00_00_00;
 const       WHITE: u32 = 0xff_ff_ff_ff;
-const   MTN_COLOR: u32 = 0xff_57_8a_e1; // #e18a57
+const   SKY_COLOR: u32 = 0xff_88_00_88; // #880088
+const   MTN_COLOR: u32 = 0xff_32_6e_9f; // #9f6e32
 const   MID_COLOR: u32 = 0xff_00_ff_ff; // #ffff00
 const COAST_COLOR: u32 = 0xff_00_b6_00; // #00b600
 const   SEA_COLOR: u32 = 0xff_ff_d9_00; // #00d9ff
 
+const HIGH_LEVEL: u8 = 240;
 const MTN_LEVEL: u8 = 180;
 const MID_LEVEL: u8 = 115;
 const SEA_LEVEL: u8 = 95;
@@ -72,8 +74,10 @@ fn height(column: &[u8]) -> u32 {
             interpolate(COAST_COLOR, MID_COLOR, SEA_LEVEL, MID_LEVEL, h)
         } else if h < MTN_LEVEL {
             interpolate(MID_COLOR, MTN_COLOR, MID_LEVEL, MTN_LEVEL, h)
+        } else if h < HIGH_LEVEL {
+            interpolate(MTN_COLOR, WHITE, MTN_LEVEL, HIGH_LEVEL, h)
         } else {
-            interpolate(MTN_COLOR, WHITE, MTN_LEVEL, 255, h)
+            interpolate(WHITE, SKY_COLOR, HIGH_LEVEL, 255, h)
         }
     } else { // water
         if sf < SEA_LEVEL {
