@@ -40,38 +40,70 @@ pub fn heightmap_grayscale(column: &[u8]) -> u32 {
     rgb(h, h, h)
 }
 
-const SEA_LEVEL: u32 = 95;
+const       BLACK: u32 = 0xff_00_00_00;
+const       WHITE: u32 = 0xff_ff_ff_ff;
+const   MTN_COLOR: u32 = 0xff_57_8a_e1; // #e18a57
+const   MID_COLOR: u32 = 0xff_00_ff_ff; // #ffff00
+const COAST_COLOR: u32 = 0xff_00_b6_00; // #00b600
+const   SEA_COLOR: u32 = 0xff_ff_d9_00; // #00d9ff
+
+const MTN_LEVEL: u8 = 180;
+const MID_LEVEL: u8 = 115;
+const SEA_LEVEL: u8 = 95;
 
 fn height(column: &[u8]) -> u32 {
     if is_empty(column) {
         return 0; // unpopulated
     }
 
-    // height
+    // surface height
     let h = match column[0] {
-        0 => 256, // wrapped around
-        h => h as u32,
+        0 => 255, // wrapped around
+        h => h,
     };
 
-    // TODO look at biome too
-    let b = column[2];
-    if b != 9 && b != 8 { // land
-        if h < SEA_LEVEL { // dug out
-            let c = h * 255 / SEA_LEVEL;
-            rgb(0, c as u8, 0)
-        } else { // normal terrain
-            let c = (h - SEA_LEVEL) * 255 / (255 - SEA_LEVEL);
-            rgb(c as u8, 255, c as u8)
+    // seafloor height
+    let sf = column[4];
+
+    if sf == 0 { // land
+        if h < SEA_LEVEL {
+            interpolate(BLACK, COAST_COLOR, 0, SEA_LEVEL, h)
+        } else if h < MID_LEVEL {
+            interpolate(COAST_COLOR, MID_COLOR, SEA_LEVEL, MID_LEVEL, h)
+        } else if h < MTN_LEVEL {
+            interpolate(MID_COLOR, MTN_COLOR, MID_LEVEL, MTN_LEVEL, h)
+        } else {
+            interpolate(MTN_COLOR, WHITE, MTN_LEVEL, 255, h)
         }
     } else { // water
-        let d = h - column[4] as u32; // depth
-        if d > SEA_LEVEL {
-            rgb(0, 0, 127)
+        if sf < SEA_LEVEL {
+            interpolate(BLACK, SEA_COLOR, 0, SEA_LEVEL, sf)
         } else {
-            let c = 255 - d * 255 / SEA_LEVEL;
-            rgb(0, c as u8, 255 - (c as u8) / 2)
+            SEA_COLOR
         }
     }
+}
+
+fn interpolate(col_start: u32, col_stop: u32, val_start: u8, val_stop: u8, val: u8) -> u32 {
+    let r_st = col_start & 0xff;
+    let g_st = col_start >> 8 & 0xff;
+    let b_st = col_start >> 16 & 0xff;
+    let r_sp = col_stop & 0xff;
+    let g_sp = col_stop >> 8 & 0xff;
+    let b_sp = col_stop >> 16 & 0xff;
+    rgb(interpolate_color_component(r_st, r_sp, val_start, val_stop, val),
+        interpolate_color_component(g_st, g_sp, val_start, val_stop, val),
+        interpolate_color_component(b_st, b_sp, val_start, val_stop, val))
+}
+
+fn interpolate_color_component(col_start: u32, col_stop: u32, val_start: u8, val_stop: u8, val: u8) -> u8 {
+    let diff_start = val - val_start;
+    let diff_stop = val_stop - val;
+    let val_diff = val_stop - val_start;
+    ( ( col_start * diff_stop as u32
+      + col_stop * diff_start as u32
+      ) / val_diff as u32
+    ) as u8
 }
 
 fn rgb(r: u8, g: u8, b: u8) -> u32 {
