@@ -125,7 +125,7 @@ pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
     region_paths
 }
 
-fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_elapsed: &mut u64) {
+pub fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_elapsed: &mut u64) {
     if total <= 0 || done == 0 {
         return;
     }

@@ -9,3 +9,4 @@ lodepng = "0.11"
 rustc-serialize = "0.3"
 threadpool = "1.3.2"
 zip = "0.1"
+nbtrs = {git="https://github.com/overviewer/nbtrs"}
