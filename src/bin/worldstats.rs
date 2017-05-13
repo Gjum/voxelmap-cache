@@ -66,7 +66,7 @@ fn analyze_region(region_path: PathBuf) -> Result<(RegionPos, Box<[u64]>), (Regi
     let mut region = try!(RegionFile::new(&region_file)
         .map_err(|e| (region_pos, e.to_string())));
 
-    let mut counts = Box::new([0_u64; 256]);
+    let mut counts = Box::new([0_u64; 256*16]);
 
     for z in 0..32 {
         for x in 0..32 {
@@ -82,8 +82,14 @@ fn analyze_region(region_path: PathBuf) -> Result<(RegionPos, Box<[u64]>), (Regi
                     let data = section.key("Data").expect("Accessing Data")
                         .as_bytes().expect("Accessing Data as bytes");
 
-                    for block in blocks {
-                        counts[*block as usize] += 1;
+                    for (i, block_id) in blocks.iter().enumerate() {
+                        let block_meta = if i % 2 == 0 {
+                            data[i / 2] & 0xf
+                        } else {
+                            data[i / 2] >> 4
+                        };
+                        let block_idmeta = (*block_id as usize) << 4 | (block_meta as usize);
+                        counts[block_idmeta] += 1;
                     }
                 }
             }
@@ -112,7 +118,7 @@ pub fn analyze_parallelized(
         });
     }
 
-    let mut counts_total = vec![0_u64; 256];
+    let mut counts_total = vec![0_u64; 256*16];
 
     let mut next_msg_elapsed = 3; // for progress meter
     let total_work = regions.len();
@@ -142,8 +148,14 @@ pub fn analyze_parallelized(
                  total_min, total_sec, region_sec, region_ms);
     };
 
-    for (block_id, block_count) in counts_total.iter().enumerate() {
-        println!("Block {:3?} counted {:?}", block_id, block_count);
+    for (block_idmeta, block_count) in counts_total.iter().enumerate() {
+        let block_id = block_idmeta >> 4;
+        let block_meta = block_idmeta & 0xf;
+        if verbose {
+            println!("Block {:3?}:{:02?} counted {:?}", block_id, block_meta, block_count);
+        } else {
+            println!("{:?}\t{:?}\t{:?}", block_id, block_meta, block_count);
+        }
     }
 }
 
