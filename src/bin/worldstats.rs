@@ -57,7 +57,7 @@ fn main() {
 
 }
 
-fn analyze_region(region_path: PathBuf) -> Result<(RegionPos, u64), (RegionPos, String)> {
+fn analyze_region(region_path: PathBuf) -> Result<(RegionPos, Box<[u64]>), (RegionPos, String)> {
     let region_pos = xz_from_region_path(&region_path)
         .expect(&format!("Getting region position of {:?}", region_path));
 
@@ -66,7 +66,7 @@ fn analyze_region(region_path: PathBuf) -> Result<(RegionPos, u64), (RegionPos, 
     let mut region = try!(RegionFile::new(&region_file)
         .map_err(|e| (region_pos, e.to_string())));
 
-    let mut count = 0;
+    let mut counts = Box::new([0_u64; 256]);
 
     for z in 0..32 {
         for x in 0..32 {
@@ -83,16 +83,14 @@ fn analyze_region(region_path: PathBuf) -> Result<(RegionPos, u64), (RegionPos, 
                         .as_bytes().expect("Accessing Data as bytes");
 
                     for block in blocks {
-                        if *block != 0 {
-                            count += 1;
-                        }
+                        counts[*block as usize] += 1;
                     }
                 }
             }
         }
     }
 
-    Ok((region_pos, count))
+    Ok((region_pos, counts))
 }
 
 pub fn analyze_parallelized(
@@ -114,7 +112,7 @@ pub fn analyze_parallelized(
         });
     }
 
-    let mut count_total = 0;
+    let mut counts_total = vec![0_u64; 256];
 
     let mut next_msg_elapsed = 3; // for progress meter
     let total_work = regions.len();
@@ -123,8 +121,10 @@ pub fn analyze_parallelized(
             Err((region_pos, error)) => {
                 println!("Error processing region {:?}: {:?}", region_pos, error);
             }
-            Ok((region_pos, count_region)) => {
-                count_total += count_region;
+            Ok((region_pos, counts_region)) => {
+                for (total_ref, region_val) in counts_total.iter_mut().zip(counts_region.iter()) {
+                    *total_ref += *region_val;
+                }
             }
         }
 
@@ -142,7 +142,9 @@ pub fn analyze_parallelized(
                  total_min, total_sec, region_sec, region_ms);
     };
 
-    println!("Found {:?} blocks in the world", count_total);
+    for (block_id, block_count) in counts_total.iter().enumerate() {
+        println!("Block {:3?} counted {:?}", block_id, block_count);
+    }
 }
 
 fn xz_from_region_path(region_path: &PathBuf) -> Result<(i32, i32), std::num::ParseIntError> {
@@ -163,7 +165,7 @@ pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
         let xz_result = xz_from_region_path(&region_path);
         if xz_result.is_ok() {
             let (x, z) = xz_result.unwrap();
-            if -20 <= x && x < 20 && -20 <= z && z < 20 {
+            if -10 <= x && x < 10 && -10 <= z && z < 10 {
                 region_paths.push_back(region_path);
             } else {
                 println!("Ignoring region file outside world border: {:?}", &region_path);
