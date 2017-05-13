@@ -66,7 +66,7 @@ fn main() {
 
     if verbose { println!("Finding regions from {} ...", args.arg_cache); }
 
-    let regions = get_regions(args.arg_cache.as_ref());
+    let regions = get_regions(args.arg_cache.as_ref(), verbose);
     let colorizer = args.get_colorizer();
 
     if verbose {

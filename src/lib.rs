@@ -104,7 +104,7 @@ fn xz_from_zip_path(zip_path: &PathBuf) -> Result<(i32, i32), std::num::ParseInt
     Ok((x, z))
 }
 
-pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
+pub fn get_regions(dir: &str, verbose: bool) -> LinkedList<PathBuf> {
     let mut region_paths = LinkedList::new();
     for zip_dir_entry in fs::read_dir(dir).expect("Listing region files") {
         let zip_path = zip_dir_entry.expect("Getting region directory entry").path();
@@ -114,12 +114,12 @@ pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
             if -20 <= x && x < 20 && -20 <= z && z < 20 {
                 region_paths.push_back(zip_path);
             } else {
-                println!("Ignoring region file outside world border: {:?}", &zip_path);
+                if verbose { println!("Ignoring region file outside world border: {:?}", &zip_path); }
             }
         } else if zip_path.to_string_lossy().ends_with("_chunk-times.gz") {
             // ignore chunk timestamp info file
         } else {
-            println!("Ignoring non-region file {:?}", &zip_path);
+            if verbose { println!("Ignoring non-region file {:?}", &zip_path); }
         }
     }
     region_paths

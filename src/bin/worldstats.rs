@@ -39,7 +39,7 @@ fn main() {
 
     if verbose { println!("Finding regions from {} ...", args.arg_world_dir); }
 
-    let regions = get_regions(&args.arg_world_dir);
+    let regions = get_regions(&args.arg_world_dir, verbose);
 
     if verbose { println!("analyzing {} regions", regions.len()); }
 
@@ -170,7 +170,7 @@ fn xz_from_region_path(region_path: &PathBuf) -> Result<(i32, i32), std::num::Pa
     Ok((x, z))
 }
 
-pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
+pub fn get_regions(dir: &str, verbose: bool) -> LinkedList<PathBuf> {
     let mut region_paths = LinkedList::new();
     for region_dir_entry in fs::read_dir(dir).expect("Listing region files") {
         let region_path = region_dir_entry.expect("Getting region directory entry").path();
@@ -180,12 +180,12 @@ pub fn get_regions(dir: &str) -> LinkedList<PathBuf> {
             if -10 <= x && x < 10 && -10 <= z && z < 10 {
                 region_paths.push_back(region_path);
             } else {
-                println!("Ignoring region file outside world border: {:?}", &region_path);
+                if verbose { println!("Ignoring region file outside world border: {:?}", &region_path); }
             }
         } else if region_path.to_string_lossy().ends_with("_chunk-times.gz") {
             // ignore chunk timestamp info file
         } else {
-            println!("Ignoring non-region file {:?}", &region_path);
+            if verbose { println!("Ignoring non-region file {:?}", &region_path); }
         }
     }
     region_paths
