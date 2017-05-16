@@ -75,18 +75,11 @@ fn render_region(zip_path: &PathBuf, colorizer: &Colorizer) -> Result<(RegionPos
     let region_pos = xz_from_zip_path(&zip_path)
         .expect(&format!("Getting region position of {:?}", zip_path));
 
-    let zip_file = try!(fs::File::open(&zip_path)
-        .map_err(|e| (region_pos, e.to_string())));
-    let mut zip_archive = try!(zip::ZipArchive::new(zip_file)
-        .map_err(|e| (region_pos, e.to_string())));
-    let mut data_file = try!(zip_archive.by_index(0)
+    let columns = try!(read_tile_cache(zip_path)
         .map_err(|e| (region_pos, e.to_string())));
 
     let mut pixbuf = Box::new([0_u32; REGION_BLOCKS]);
-    let columns = &mut [0; 17*REGION_BLOCKS];
     let get_column_color = colorizer.column_color_fn();
-
-    try!(data_file.read(columns).map_err(|e| (region_pos, e.to_string())));
 
     for (i, column) in columns.chunks(17).enumerate() {
         pixbuf[i] = get_column_color(column);
@@ -146,4 +139,17 @@ pub fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_e
     let sec = sec_left % 60;
     println!("{}/{} processed, {}:{:02?} left",
         done, total, min, sec);
+}
+
+pub fn read_tile_cache(zip_path: &PathBuf) -> Result<Box<[u8; 17*REGION_BLOCKS]>, String> {
+    let zip_file = try!(fs::File::open(&zip_path)
+        .map_err(|e| e.to_string()));
+    let mut zip_archive = try!(zip::ZipArchive::new(zip_file)
+        .map_err(|e| e.to_string()));
+    let mut data_file = try!(zip_archive.by_index(0)
+        .map_err(|e| e.to_string()));
+    let mut columns = Box::new([0; 17*REGION_BLOCKS]);
+    try!(data_file.read(&mut *columns)
+        .map_err(|e| e.to_string()));
+    Ok(columns)
 }
