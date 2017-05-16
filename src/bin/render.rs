@@ -47,15 +47,6 @@ impl Args {
             panic!("Unknown colorizer selected")
         }
     }
-
-    fn get_processor(&self) -> Box<Processor> {
-        if self.arg_output.contains("{x}") && self.arg_output.contains("{z}")
-            || self.arg_output.contains("{tile}") {
-            Box::new(TilesProcessor { tiles_pattern: self.arg_output.clone() })
-        } else {
-            Box::new(SingleImageProcessor::new(&self.arg_output))
-        }
-    }
 }
 
 fn main() {
@@ -74,7 +65,7 @@ fn main() {
                  regions.len(), args.arg_output, colorizer);
     }
 
-    let processor = args.get_processor();
+    let processor = get_processor(&args.arg_output);
 
     let start_time = Instant::now();
     render_parallelized(

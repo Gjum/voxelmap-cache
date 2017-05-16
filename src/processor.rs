@@ -86,3 +86,12 @@ impl Processor for SingleImageProcessor {
             .expect(&format!("Encoding image {}", self.img_path));
     }
 }
+
+pub fn get_processor(arg_output: &String) -> Box<Processor> {
+    if arg_output.contains("{x}") && arg_output.contains("{z}")
+        || arg_output.contains("{tile}") {
+        Box::new(TilesProcessor { tiles_pattern: arg_output.clone() })
+    } else {
+        Box::new(SingleImageProcessor::new(&arg_output))
+    }
+}
