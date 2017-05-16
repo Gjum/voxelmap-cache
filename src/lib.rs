@@ -31,20 +31,20 @@ pub fn render_parallelized(
 
     let start_time_regions = Instant::now();
 
+    let total_work = regions.len();
     for work_item in &regions {
         let tx = tx.clone();
         let my_work_item = work_item.clone();
         let my_colorizer = colorizer_arc.clone();
         pool.execute(move || {
-            let result = render_region(my_work_item, my_colorizer.as_ref());
-            tx.send(result).unwrap();
+            let result = render_region(&my_work_item, my_colorizer.as_ref());
+            tx.send(result).expect(&format!("Sending result from {:?}", my_work_item));;
         });
     }
 
     let mut next_msg_elapsed = 3; // for progress meter
-    let total_work = regions.len();
     for work_done in 0..total_work {
-        match rx.recv().unwrap() {
+        match rx.recv().expect("Receiving next result") {
             Err((region_pos, error)) => {
                 println!("Error rendering region {:?}: {:?}", region_pos, error);
             }
@@ -71,7 +71,7 @@ pub fn render_parallelized(
     processor.post_process();
 }
 
-fn render_region(zip_path: PathBuf, colorizer: &Colorizer) -> Result<(RegionPos, Box<RegionPixels>), (RegionPos, String)> {
+fn render_region(zip_path: &PathBuf, colorizer: &Colorizer) -> Result<(RegionPos, Box<RegionPixels>), (RegionPos, String)> {
     let region_pos = xz_from_zip_path(&zip_path)
         .expect(&format!("Getting region position of {:?}", zip_path));
 
