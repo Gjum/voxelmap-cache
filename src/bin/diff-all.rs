@@ -134,40 +134,26 @@ fn analyze_tile(tile_pos: RegionPos, world_path: String) -> Result<(RegionPos, B
 
     let mut pixbuf = Box::new([0_u32; REGION_BLOCKS]);
     for i in 0..REGION_BLOCKS {
-        let mut changed = false;
-        let mut height_changed = false;
-        let mut block_changed = false;
-
-        let mut prev: &[u8] = &[0; 17];
+        let mut color = 0xff_000000; // black: unchanged
+        let mut prev_cache: Option<&[u8]> = None;
         for column_iter in &mut chunks {
             let column = column_iter.next().expect("Getting next column from tile");
             if is_empty(column) {
                 continue;
             }
-            if !is_empty(prev) {
+            if prev_cache.is_some() {
+                let prev = prev_cache.expect("Getting Some");
                 if column != prev {
-                    changed = true;
+                    color |= 0xff_ff0000; // blue
                     if column[0] != prev[0] {
-                        height_changed = true;
+                        color |= 0xff_0000ff; // red
                     }
                     if column[1] != prev[1] || column[2] != prev[2] {
-                        block_changed = true;
+                        color |= 0xff_00ff00; // green
                     }
                 }
             }
-            prev = column;
-        }
-        let mut color = 0xff_000000; // black: unchanged
-        if height_changed {
-            color |= 0xff_0000ff; // red
-        }
-        if block_changed { // same height
-            color |= 0xff_00ff00; // green
-        }
-        if changed {
-            // same top block, others are different
-            // this can happen with plants or fences etc.
-            color |= 0xff_ff0000; // blue
+            prev_cache = Some(column);
         }
         pixbuf[i] = color;
     }
