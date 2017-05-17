@@ -128,16 +128,12 @@ fn analyze_tile(tile_pos: RegionPos, world_path: String) -> Result<(RegionPos, B
         return Err((tile_pos, format!("Only one tile for {}", tiles_glob)));
     }
 
-    let mut chunks = tiles.iter().map(|columns|
-        columns.chunks(17)
-    ).collect::<Vec<_>>();
-
     let mut pixbuf = Box::new([0_u32; REGION_BLOCKS]);
     for i in 0..REGION_BLOCKS {
         let mut color = 0xff_000000; // black: unchanged
         let mut prev_cache: Option<&[u8]> = None;
-        for column_iter in &mut chunks {
-            let column = column_iter.next().expect("Getting next column from tile");
+        for columns in &tiles {
+            let column = &columns[i*17 .. (i+1)*17];
             if is_empty(column) {
                 continue;
             }
