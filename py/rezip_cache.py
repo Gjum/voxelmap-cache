@@ -7,7 +7,7 @@ import os
 import sys
 import time
 from shutil import copystat, move
-from zipfile import ZipFile
+from zipfile import ZipFile, ZIP_BZIP2
 
 def main():
     try:
@@ -44,7 +44,7 @@ def rezip_all(target_dir, source_dir):
             continue
 
         # write to intermediate file in case source_dir == target_dir
-        zf = ZipFile(target_zip+'.new', 'w')
+        zf = ZipFile(target_zip+'.new', 'w', compression=ZIP_BZIP2)
         zf.writestr('data', data)
         zf.close()
 
