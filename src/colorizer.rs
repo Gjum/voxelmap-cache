@@ -1,6 +1,6 @@
 use biomes::BIOME_COLOR_TABLE;
 
-fn is_empty(column: &[u8]) -> bool {
+pub fn is_empty(column: &[u8]) -> bool {
     return column[1] == 0 && column[2] == 0 // block is air
         || column[0] > 0 && column[0] < 6; // inside bedrock (specific to Devoted)
 }

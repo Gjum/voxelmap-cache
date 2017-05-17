@@ -16,6 +16,8 @@ pub mod biomes;
 pub mod colorizer;
 pub mod processor;
 
+pub type TileCache = [u8; 17*REGION_BLOCKS];
+
 pub fn render_parallelized(
     mut processor: Box<Processor>,
     colorizer: Colorizer,
@@ -141,7 +143,7 @@ pub fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_e
         done, total, min, sec);
 }
 
-pub fn read_tile_cache(zip_path: &PathBuf) -> Result<Box<[u8; 17*REGION_BLOCKS]>, String> {
+pub fn read_tile_cache(zip_path: &PathBuf) -> Result<Box<TileCache>, String> {
     let zip_file = try!(fs::File::open(&zip_path)
         .map_err(|e| e.to_string()));
     let mut zip_archive = try!(zip::ZipArchive::new(zip_file)
