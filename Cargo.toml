@@ -5,6 +5,7 @@ authors = ["Gjum <code.gjum@gmail.com>"]
 
 [dependencies]
 docopt = "~0.6"
+glob = "0.2"
 lodepng = "0.11"
 rustc-serialize = "0.3"
 threadpool = "1.3.2"
