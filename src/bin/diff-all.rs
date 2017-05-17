@@ -6,6 +6,7 @@ extern crate voxelmap_cache;
 
 use docopt::Docopt;
 use glob::glob;
+use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
@@ -105,7 +106,7 @@ fn analyze_tile(tile_pos: RegionPos, world_path: String) -> Result<(RegionPos, B
             match path_result {
                 Err(e) => {
                     println!("{} in {:?}", e, e.path());
-                    None::<Box<TileCache>>
+                    None::<(Box<TileCache>, _)>
                 }
                 Ok(path) => {
                     read_tile_cache(&path)
@@ -114,42 +115,45 @@ fn analyze_tile(tile_pos: RegionPos, world_path: String) -> Result<(RegionPos, B
                         ()
                     })
                     .ok()
+                    .map(|tile_cache| (tile_cache, path))
                 }
             }
         )
         .filter_map(|x| x)
-        .collect::<Vec<Box<TileCache>>>();
+        .collect::<Vec<(Box<TileCache>, _)>>();
 
     let num_caches_found = tiles.len();
     if num_caches_found <= 0 {
         return Err((tile_pos, format!("No tiles for {}", tiles_glob)));
     }
-    if num_caches_found == 1 {
-        return Err((tile_pos, format!("Only one tile for {}", tiles_glob)));
-    }
+
+    let reference_cache = try!(read_tile_cache(&PathBuf::from(format!("/home/gjum/data/devoted3-voxelmap/contrib/new/jecowa_full_wdl_2017-05-02/world/Overworld (dimension 0)/{},{}.zip", tile_x, tile_z)))
+        .map_err(|e| (tile_pos, e.to_string())));
 
     let mut pixbuf = Box::new([0_u32; REGION_BLOCKS]);
     for i in 0..REGION_BLOCKS {
         let mut color = 0xff_000000; // black: unchanged
-        let mut prev_cache: Option<&[u8]> = None;
-        for columns in &tiles {
+        let reference_column = &reference_cache[i*17 .. (i+1)*17];
+        let mut prev = reference_column;
+        for &(ref columns, ref tile_path) in &tiles {
             let column = &columns[i*17 .. (i+1)*17];
             if is_empty(column) {
                 continue;
             }
-            if prev_cache.is_some() {
-                let prev = prev_cache.expect("Getting Some");
-                if column != prev {
-                    color |= 0xff_ff0000; // blue
-                    if column[0] != prev[0] {
-                        color |= 0xff_0000ff; // red
-                    }
-                    if column[1] != prev[1] || column[2] != prev[2] {
-                        color |= 0xff_00ff00; // green
-                    }
+            // compare with known biome from reference cache
+            if column[16] != reference_column[16] {
+                continue;
+            }
+            if column != prev {
+                color |= 0xff_ff0000; // blue
+                if column[0] != prev[0] {
+                    color |= 0xff_0000ff; // red
+                }
+                if column[1] != prev[1] || column[2] != prev[2] {
+                    color |= 0xff_00ff00; // green
                 }
             }
-            prev_cache = Some(column);
+            prev = column;
         }
         pixbuf[i] = color;
     }
