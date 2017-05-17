@@ -157,17 +157,19 @@ fn analyze_tile(tile_pos: RegionPos, world_path: String) -> Result<(RegionPos, B
             }
             prev = column;
         }
-        pixbuf[i] = if height_changed {
-            0xff_0000ff // red
-        } else if block_changed { // same height
-            0xff_0088ff // orange
-        } else if changed {
+        let mut color = 0xff_000000; // black: unchanged
+        if height_changed {
+            color |= 0xff_0000ff; // red
+        }
+        if block_changed { // same height
+            color |= 0xff_00ff00; // green
+        }
+        if changed {
             // same top block, others are different
             // this can happen with plants or fences etc.
-            0xff_880088 // purple
-        } else { // unchanged
-            0xff_888800 // turquoise
-        };
+            color |= 0xff_ff0000; // blue
+        }
+        pixbuf[i] = color;
     }
 
     Ok((tile_pos, pixbuf))
