@@ -36,8 +36,12 @@ def rezip_all(target_dir, source_dir):
         source_zip = source_dir + '/' + region
         target_zip = target_dir + '/' + region
 
-        with ZipFile(source_zip).open('data') as f:
-            data = f.read()
+        try:
+            with ZipFile(source_zip).open('data') as f:
+                data = f.read()
+        except Exception as e:
+            print('skipping zip file', source_zip, 'for error', e)
+            continue
 
         # write to intermediate file in case source_dir == target_dir
         zf = ZipFile(target_zip+'.new', 'w')
