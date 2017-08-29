@@ -48,7 +48,7 @@ Usage:
 - biome: color coded biomes
 - height: color coded block heights and water depths
 
-To output tiles instead of one full image, `<output>` has to contain `{tile}` or `{x}` and `{z}`.
+To output tiles instead of one full image, the `<output>` path has to contain `{tile}` or `{x}` and `{z}`.
 They will be replaced with the tile coordinates for each tile image.
 The tiles will be 256x256 pixels in size, the same as VoxelMap's tiles.
 
