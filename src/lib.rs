@@ -13,6 +13,7 @@ use std::time::Instant;
 use threadpool::ThreadPool;
 
 pub mod biomes;
+pub mod blocks;
 pub mod colorizer;
 pub mod processor;
 

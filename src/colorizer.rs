@@ -1,4 +1,5 @@
 use biomes::BIOME_COLOR_TABLE;
+use blocks::{BLOCK_COLOR_TABLE, BLOCK_OPACITY_TABLE};
 
 pub fn is_empty(column: &[u8]) -> bool {
     return column[1] == 0 && column[2] == 0 // block is air
@@ -11,6 +12,19 @@ pub fn biome(column: &[u8]) -> u32 {
     }
     let b = column[16];
     BIOME_COLOR_TABLE[b as usize]
+}
+
+pub fn terrain(column: &[u8]) -> u32 {
+    if is_empty(column) {
+        return 0;
+    }
+    let idmeta = (column[1] as usize) << 8 | column[2] as usize;
+    let id = idmeta & 0x0fff;
+    let meta = idmeta >> 12;
+    let index = id << 4 | meta;
+    BLOCK_COLOR_TABLE[index]
+    // TODO other layers too
+    // TODO relief shadows
 }
 
 pub fn simple(column: &[u8]) -> u32 {
@@ -133,7 +147,7 @@ impl Colorizer {
             Colorizer::Height => height,
             Colorizer::Light => light,
             Colorizer::Simple => simple,
-            Colorizer::Terrain => unimplemented!(),
+            Colorizer::Terrain => terrain,
         })
     }
 }
