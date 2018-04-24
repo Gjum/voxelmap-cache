@@ -2,8 +2,7 @@ use biomes::BIOME_COLOR_TABLE;
 use blocks::{BLOCK_COLOR_TABLE, BLOCK_OPACITY_TABLE};
 
 pub fn is_empty(column: &[u8]) -> bool {
-    return column[1] == 0 && column[2] == 0 // block is air
-        || column[0] > 0 && column[0] < 6; // inside bedrock (specific to Devoted)
+    return column[1] == 0 && column[2] == 0; // block is air
 }
 
 pub fn biome(column: &[u8]) -> u32 {
@@ -27,15 +26,18 @@ pub fn terrain(column: &[u8]) -> u32 {
     // TODO relief shadows
 }
 
+const   S_WATER: u32 = 0xff_ff_c5_a6; // #a6c5ff
+const    S_LAND: u32 = 0xff_dc_e4_e7; // #e7e4dc
+
 pub fn simple(column: &[u8]) -> u32 {
     if is_empty(column) {
         return 0;
     }
     let b = column[0+2];
     if b == 8 || b == 9 {
-        return rgb(166, 197, 255); // water: #a6c5ff
+        return S_WATER;
     }
-    return rgb(231, 228, 220); // land: #e7e4dc
+    return S_LAND;
 }
 
 pub fn light(column: &[u8]) -> u32 {
@@ -56,16 +58,16 @@ pub fn heightmap_grayscale(column: &[u8]) -> u32 {
 
 const       BLACK: u32 = 0xff_00_00_00;
 const       WHITE: u32 = 0xff_ff_ff_ff;
-const   SKY_COLOR: u32 = 0xff_88_00_88; // #880088
-const   MTN_COLOR: u32 = 0xff_32_6e_9f; // #9f6e32
-const   MID_COLOR: u32 = 0xff_00_ff_ff; // #ffff00
-const COAST_COLOR: u32 = 0xff_00_b6_00; // #00b600
-const   SEA_COLOR: u32 = 0xff_ff_d9_00; // #00d9ff
+const   SKY_COLOR: u32 = 0xff_88_00_88; // #880088 pink
+const   MTN_COLOR: u32 = 0xff_32_6e_9f; // #9f6e32 brown
+const   MID_COLOR: u32 = 0xff_00_ff_ff; // #ffff00 yellow
+const COAST_COLOR: u32 = 0xff_00_b6_00; // #00b600 dark green
+const   SEA_COLOR: u32 = 0xff_ff_d9_00; // #00d9ff light blue
 
 const HIGH_LEVEL: u8 = 240;
-const MTN_LEVEL: u8 = 180;
-const MID_LEVEL: u8 = 115;
-const SEA_LEVEL: u8 = 95;
+const MTN_LEVEL: u8 = 150;
+const MID_LEVEL: u8 = 100;
+const SEA_LEVEL: u8 = 64;
 
 fn height(column: &[u8]) -> u32 {
     if is_empty(column) {
@@ -81,7 +83,8 @@ fn height(column: &[u8]) -> u32 {
     // seafloor height
     let sf = column[4];
 
-    if sf == 0 { // land
+    let b = column[0+2]; // block type
+    if b != 8 && b != 9 { // land
         if h < SEA_LEVEL {
             interpolate(BLACK, COAST_COLOR, 0, SEA_LEVEL, h)
         } else if h < MID_LEVEL {

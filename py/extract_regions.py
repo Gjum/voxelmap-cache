@@ -69,6 +69,12 @@ def hardlink_contrib(main_cache, contrib, contrib_path, verbose=False, dry=False
     elif 'Overworld (dimension 0)' in entries:
         if verbose: print('? has only Overworld dir')
         hardlink_dir(main_cache, contrib, contrib_path + '/Overworld (dimension 0)', verbose, dry)
+    elif 'mc.civclassic.com' in entries:
+        if verbose: print('? has hostname dir')
+        if 'world' in [entry.name for entry in os.scandir(contrib_path + '/mc.civclassic.com')]:
+            if verbose: print('? has hostname/world dir')
+            hardlink_dir(main_cache, contrib+'_world', contrib_path + '/mc.civclassic.com/world/Overworld (dimension 0)', verbose, dry)
+        hardlink_dir(main_cache, contrib, contrib_path + '/mc.civclassic.com/Overworld (dimension 0)', verbose, dry)
     elif 'play.devotedmc.com' in entries:
         if verbose: print('? has hostname dir')
         hardlink_dir(main_cache, contrib, contrib_path + '/play.devotedmc.com/world/Overworld (dimension 0)', verbose, dry)

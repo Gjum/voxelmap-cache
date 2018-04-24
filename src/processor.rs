@@ -42,10 +42,10 @@ pub struct SingleImageProcessor {
     img_path: String,
 }
 
-const IMG_WIDTH: usize = 40 * REGION_WIDTH;
-const IMG_HEIGHT: usize = 40 * REGION_HEIGHT;
-const IMG_WEST: i32 = -20 * REGION_WIDTH as i32;
-const IMG_NORTH: i32 = -20 * REGION_HEIGHT as i32;
+const IMG_WIDTH: usize = 2*51 * REGION_WIDTH;
+const IMG_HEIGHT: usize = 2*51 * REGION_HEIGHT;
+const IMG_WEST: i32 = -51 * REGION_WIDTH as i32;
+const IMG_NORTH: i32 = -51 * REGION_HEIGHT as i32;
 
 impl SingleImageProcessor {
     pub fn new(img_pattern: &String) -> SingleImageProcessor {
@@ -81,6 +81,7 @@ impl Processor for SingleImageProcessor {
     }
 
     fn post_process(&mut self) {
+        // XXX verbose?
         println!("Saving image as {}", self.img_path);
         lodepng::encode32_file(&self.img_path, &self.pixbuf[..], IMG_WIDTH, IMG_HEIGHT)
             .expect(&format!("Encoding image {}", self.img_path));

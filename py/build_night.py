@@ -8,7 +8,7 @@ import sys
 import time
 from PIL import Image
 
-darkness = .3  # how dark the night areas are, 0 (black) to 1 (day)
+darkness = .2  # how dark the night areas are, 0 (black) to 1 (day)
 
 def make_night(day_path, light_path):
     day = Image.open(day_path).convert("RGBA")  # make sure there's a black value

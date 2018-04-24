@@ -107,7 +107,7 @@ pub fn get_regions(dir: &str, verbose: bool) -> LinkedList<PathBuf> {
         let xz_result = xz_from_zip_path(&zip_path);
         if xz_result.is_ok() {
             let (x, z) = xz_result.unwrap();
-            if -20 <= x && x < 20 && -20 <= z && z < 20 {
+            if -60 <= x && x < 60 && -60 <= z && z < 60 {
                 region_paths.push_back(zip_path);
             } else {
                 if verbose { println!("Ignoring region file outside world border: {:?}", &zip_path); }
@@ -121,6 +121,7 @@ pub fn get_regions(dir: &str, verbose: bool) -> LinkedList<PathBuf> {
     region_paths
 }
 
+// TODO put more weight on recent measurements
 pub fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_elapsed: &mut u64) {
     if total <= 0 || done == 0 {
         return;
@@ -152,7 +153,7 @@ pub fn read_tile_cache(zip_path: &PathBuf) -> Result<Box<TileCache>, String> {
     let mut data_file = try!(zip_archive.by_index(0)
         .map_err(|e| e.to_string()));
     let mut columns = Box::new([0; 17*REGION_BLOCKS]);
-    try!(data_file.read(&mut *columns)
+    try!(data_file.read_exact(&mut *columns)
         .map_err(|e| e.to_string()));
     Ok(columns)
 }

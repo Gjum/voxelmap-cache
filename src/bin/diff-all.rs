@@ -47,9 +47,14 @@ fn main() {
 
     let start_time_regions = Instant::now();
 
-    let total_work = 40*40;
-    for tile_z in -20..20 {
-        for tile_x in -20..20 {
+    let mut total_work = 0;
+    let sq_radius = 13000/256 + 1;
+    for tile_z in -sq_radius..sq_radius {
+        for tile_x in -sq_radius..sq_radius {
+            if tile_x*tile_x + tile_z*tile_z > 1 + 13000*13000 / (256*256) {
+                continue;
+            }
+            total_work += 1;
             let tx = tx.clone();
             let world_dir = args.arg_cache_path.clone();
             pool.execute(move || {
@@ -99,7 +104,7 @@ fn main() {
 
 fn analyze_tile(tile_pos: RegionPos, world_path: String) -> Result<(RegionPos, Box<RegionPixels>), (RegionPos, String)> {
     let (tile_x, tile_z) = tile_pos;
-    let tiles_glob = format!("{}/{},{}*.zip", world_path, tile_x, tile_z);
+    let tiles_glob = format!("{}/{},{},*.zip", world_path, tile_x, tile_z);
     let matching_dir_entries = glob(&tiles_glob).expect("Parsing glob pattern");
     let tiles = matching_dir_entries
         .map(|path_result|

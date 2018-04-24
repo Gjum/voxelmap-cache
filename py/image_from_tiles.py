@@ -43,6 +43,8 @@ def stitch_all(img_path, tiles_dir):
             # continue
             raise
 
+    print('saving image as', img_path)
+
     # out.thumbnail((256, 256))#, Image.NEAREST)
     out.save(img_path, 'PNG')
 

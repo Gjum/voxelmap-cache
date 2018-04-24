@@ -7,18 +7,28 @@ import os
 import sys
 import time
 from shutil import copystat, move
-from zipfile import ZipFile, ZIP_BZIP2
+import zipfile as zf
+from zipfile import ZipFile
+
+compressions = dict(zip(
+    ('bzip2'     , 'deflate'      , 'lzma'     , 'store'      ),
+    (zf.ZIP_BZIP2, zf.ZIP_DEFLATED, zf.ZIP_LZMA, zf.ZIP_STORED)
+))
 
 def main():
     try:
-        target_dir, source_dir = sys.argv[1:3]
+        compression_name, target, source = sys.argv[1:4]
     except ValueError:
-        print('Args: <target dir> <source dir>')
+        print('Args: <compression method> <target dir> <source dir>')
+        print('Available compression methods: ' + ' '.join(compressions.keys()))
     else:
-        rezip_all(target_dir, source_dir)
+        compression = compressions[compression_name]
+        if source[-4:] == '.zip':
+            rezip_one(target, source, compression)
+        else: rezip_all(target, source, compression)
 
 
-def rezip_all(target_dir, source_dir):
+def rezip_all(target_dir, source_dir, compression=zf.ZIP_STORED):
     os.makedirs(target_dir, exist_ok=True)
 
     regions = [region for region in os.listdir(source_dir) if region[-4:] == '.zip']
@@ -36,22 +46,26 @@ def rezip_all(target_dir, source_dir):
         source_zip = source_dir + '/' + region
         target_zip = target_dir + '/' + region
 
+        rezip_one(target_zip, source_zip, compression)
+
+    print('Done, new cache is at', target_dir)
+
+
+def rezip_one(target_zip, source_zip, compression):
         try:
             with ZipFile(source_zip).open('data') as f:
                 data = f.read()
         except Exception as e:
             print('skipping zip file', source_zip, 'for error', e)
-            continue
+            return
 
         # write to intermediate file in case source_dir == target_dir
-        zf = ZipFile(target_zip+'.new', 'w', compression=ZIP_BZIP2)
+        zf = ZipFile(target_zip+'.new', 'w', compression=compression)
         zf.writestr('data', data)
         zf.close()
 
         copystat(source_zip, target_zip+'.new')
         move(target_zip+'.new', target_zip)
-
-    print('Done, new cache is at', target_dir)
 
 
 if __name__ == '__main__':
