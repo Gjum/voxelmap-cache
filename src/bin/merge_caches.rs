@@ -13,21 +13,24 @@ use std::time::{Instant, SystemTime};
 use threadpool::ThreadPool;
 
 const USAGE: &'static str = "
-Usage: merge_caches [-q] [-t threads] <output-path> <cache-path>
+Usage: merge_caches [-q] [-t threads] [--between=<bounds>] <output-path> <cache-path>...
 
 cache-path contains voxelmap caches in the format `<x>,<z>,<contrib-name>.zip`
 
 Options:
     -q, --quiet  Do not output info messages.
     -t           Number of threads to use for parallel processing
+    --between=<bounds>  Only merge tiles at least partially within this bounding box,
+                        format: w,n,e,s [default: -99999,-99999,99999,99999]
 ";
 
 #[derive(Debug, RustcDecodable)]
 struct Args {
     flag_quiet: bool,
     arg_threads: Option<usize>,
+    flag_between: String,
     arg_output_path: String,
-    arg_cache_path: String,
+    arg_cache_path: Vec<String>,
 }
 
 fn main() {
@@ -38,11 +41,44 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
     let verbose = !args.flag_quiet;
 
-    let tile_paths =
-        get_tile_paths_in_dir(args.arg_cache_path.as_str(), verbose).unwrap_or_else(|e| {
-            println!("Error while listing cache directory: {:?}", e);
+    let tile_paths = get_tile_paths_in_dirs(&args.arg_cache_path, verbose).unwrap_or_else(|e| {
+        println!("Error while listing cache directory: {:?}", e);
+        std::process::exit(1);
+    });
+
+    let bounds = args
+        .flag_between
+        .splitn(4, ",")
+        .map(str::parse)
+        .collect::<Result<Vec<i32>, _>>()
+        .unwrap_or_else(|e| {
+            println!(
+                "Invalid arg: between: {} {}",
+                &args.flag_between,
+                e.to_string()
+            );
             std::process::exit(1);
         });
+    if bounds.len() != 4 || bounds[0] > bounds[2] || bounds[1] > bounds[3] {
+        println!(
+            "Invalid arg: between: {} should be: w,n,e,s",
+            &args.flag_between
+        );
+        std::process::exit(1);
+    }
+
+    let tile_paths: Vec<PathBuf> = tile_paths
+        .into_iter()
+        .filter(|path| {
+            let (tile_x, tile_z) = get_xz_from_tile_path(path).expect("getting pos from tile path");
+            let tw = TILE_WIDTH as i32;
+            let th = TILE_HEIGHT as i32;
+            let x = tile_x * tw;
+            let z = tile_z * th;
+            let (w, n, e, s) = (bounds[0], bounds[1], bounds[2], bounds[3]);
+            x + tw > w && x < e && z + th > n && z < s
+        })
+        .collect();
 
     // TODO box this? to prevent stack from overflowing
     let mut tile_paths_by_pos: HashMap<TilePos, Vec<PathBuf>> = HashMap::new();
@@ -484,18 +520,23 @@ fn get_contrib_from_tile_path(tile_path: &PathBuf) -> Result<String, String> {
         .to_string())
 }
 
-pub fn get_tile_paths_in_dir(dir: &str, verbose: bool) -> Result<LinkedList<PathBuf>, String> {
+pub fn get_tile_paths_in_dirs(
+    dirs: &Vec<String>,
+    verbose: bool,
+) -> Result<LinkedList<PathBuf>, String> {
     let mut tile_paths = LinkedList::new();
-    for zip_dir_entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
-        let tile_path = zip_dir_entry.map_err(|e| e.to_string())?.path();
-        match get_xz_from_tile_path(&tile_path) {
-            Ok(_pos) => tile_paths.push_back(tile_path),
-            Err(e) => {
-                if tile_path.to_string_lossy().ends_with("_chunk-times.gz") {
-                    // ignore chunk timestamp info file
-                } else {
-                    if verbose {
-                        println!("Ignoring non-tile file {:?} {:?}", &tile_path, e);
+    for dir in dirs {
+        for zip_dir_entry in fs::read_dir(dir.as_str()).map_err(|e| e.to_string())? {
+            let tile_path = zip_dir_entry.map_err(|e| e.to_string())?.path();
+            match get_xz_from_tile_path(&tile_path) {
+                Ok(_pos) => tile_paths.push_back(tile_path),
+                Err(e) => {
+                    if tile_path.to_string_lossy().ends_with("_chunk-times.gz") {
+                        // ignore chunk timestamp info file
+                    } else {
+                        if verbose {
+                            println!("Ignoring non-tile file {:?} {:?}", &tile_path, e);
+                        }
                     }
                 }
             }
