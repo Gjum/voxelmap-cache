@@ -1,6 +1,7 @@
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate threadpool;
+extern crate voxelmap_cache;
 extern crate zip;
 
 use docopt::Docopt;
@@ -11,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::{Instant, SystemTime};
 use threadpool::ThreadPool;
+use voxelmap_cache::blocks::BLOCK_STRINGS_ARR;
 
 const USAGE: &'static str = "
 Usage: merge_caches [-q] [-t threads] [--between=<bounds>] <output-path> <cache-path>...
@@ -80,8 +82,7 @@ fn main() {
         })
         .collect();
 
-    // TODO box this? to prevent stack from overflowing
-    let mut tile_paths_by_pos: HashMap<TilePos, Vec<PathBuf>> = HashMap::new();
+    let mut tile_paths_by_pos = Box::new(HashMap::new());
     for tile_path in &tile_paths {
         let pos = get_xz_from_tile_path(&tile_path).expect("getting pos from tile path");
         tile_paths_by_pos
@@ -127,7 +128,7 @@ fn main() {
     //     let (x, z) = pos;
     //     let out_path = PathBuf::from(format!("{}/{},{}.zip", args.arg_output_path, x, z));
     //     pool.execute(move || {
-    //         let result = merge_tiles(out_path, tile_paths);
+    //         let result = merge_all_tiles(out_path, tile_paths);
     //         tx.send(result).expect("Sending result");
     //     });
     // }
@@ -140,14 +141,14 @@ fn main() {
     for (work_done, (pos, tile_paths)) in sorted_by_tiles_per_pos.into_iter().enumerate() {
         let (x, z) = pos;
         let out_path = PathBuf::from(format!("{}/{},{}.zip", args.arg_output_path, x, z));
-        let (_out_path, used, skipped) = merge_tiles(out_path, tile_paths);
+        let (_out_path, used, skipped) = merge_all_tiles(out_path, tile_paths);
 
         // TODO <<<<<<<<<<
 
         for (path, err) in skipped {
             let contrib = get_contrib_from_tile_path(&path).unwrap_or(String::new());
             *skipped_contribs.entry(contrib.clone()).or_insert_with(|| {
-                println!("Skipping contrib {} {}", &contrib, &err);
+                println!("Skipping contrib {:?} {}", &path, &err);
                 0
             }) += 1;
         }
@@ -167,19 +168,19 @@ fn main() {
         let tile_ms = time_per_work_item.as_secs() * 1_000
             + time_per_work_item.subsec_nanos() as u64 / 1_000_000;
         println!(
-            "Done merging. Took {}:{:02} for all {} tiles, {}ms per tile",
+            "Done merging. Took {}:{:02} for all {} used tiles, {}ms per tile",
             total_min, total_sec, total_used, tile_ms,
         );
     };
 }
 
-pub fn merge_tiles(
+pub fn merge_all_tiles(
     out_path: PathBuf,
     tile_paths: Vec<PathBuf>,
 ) -> (PathBuf, Vec<PathBuf>, Vec<(PathBuf, String)>) {
     if tile_paths.len() == 1 {
+        // just one contrib, no merging needed, hardlink it to destination
         let tile_path = tile_paths.into_iter().next().unwrap();
-        println!("Hardlinking {:?}", &tile_path);
         return match std::fs::hard_link(&tile_path, &out_path) {
             Ok(()) => (out_path, vec![tile_path], Vec::new()),
             Err(e) => (out_path, Vec::new(), vec![(tile_path, e.to_string())]),
@@ -201,51 +202,26 @@ pub fn merge_tiles(
         // pos: get_xz_from_tile_path(&out_path).ok(),
         source: None,
         pos: None,
-        keys: HashMap::new(),
-        columns: [0; TILE_COLUMNS * COLUMN_BYTES],
+        keys: Some(HashMap::new()),
+        columns: vec![0; TILE_COLUMNS * COLUMN_BYTES],
     });
 
     let mut num_chunks_left = TILE_CHUNKS;
     let mut chunks_done = vec![false; num_chunks_left];
 
-    // copy data for first tile, usually speeds up many things
-    let mut sorted_paths_iter = sorted_paths.into_iter();
-    let (_mtime, tile_path) = sorted_paths_iter
-        .next()
-        .expect("getting first path for pos");
-    match read_tile(&tile_path) {
-        Ok(tile) => {
-            used.push(tile_path);
-            out_tile.columns[..].copy_from_slice(&tile.columns[..]);
-            out_tile.keys.extend(tile.keys);
-        }
-        Err(e) => {
-            skipped.push((tile_path, e));
-        }
-    };
-
-    for (_mtime, tile_path) in sorted_paths_iter {
-        let result = read_tile(&tile_path).and_then(|tile| {
-            let converter = merge_keys(&mut out_tile.keys, &tile.keys);
-
-            for chunk_nr in 0..TILE_CHUNKS {
-                if chunks_done[chunk_nr] || tile.is_chunk_unset(chunk_nr) {
-                    continue;
-                }
-
-                copy_convert_chunk(chunk_nr, &converter, &tile.columns, &mut out_tile.columns)
-                    .map_err(|e| e.to_string())?;
-
-                chunks_done[chunk_nr] = true;
-                num_chunks_left -= 1;
+    for (_mtime, tile_path) in sorted_paths {
+        let result = read_tile(&tile_path)
+            .and_then(|tile| merge_two_tiles(&tile, &mut out_tile, &mut chunks_done));
+        num_chunks_left -= match result {
+            Ok(chunks_processed) => {
+                used.push(tile_path);
+                chunks_processed
             }
-
-            Ok(())
-        });
-        match result {
-            Ok(()) => used.push(tile_path),
-            Err(e) => skipped.push((tile_path, e)),
-        }
+            Err(e) => {
+                skipped.push((tile_path, e));
+                0
+            }
+        };
 
         if num_chunks_left <= 0 {
             break;
@@ -259,7 +235,35 @@ pub fn merge_tiles(
     (out_path, used, skipped)
 }
 
-fn merge_keys(keys_out: &mut HashMap<String, u16>, keys_in: &HashMap<String, u16>) -> Vec<u16> {
+fn merge_two_tiles(
+    tile: &Tile,
+    out_tile: &mut Tile,
+    chunks_done: &mut Vec<bool>,
+) -> Result<usize, String> {
+    let mut converter = match tile.keys {
+        Some(ref keys) => {
+            merge_keys_and_build_converter(&mut out_tile.keys.as_mut().unwrap(), &keys)
+        }
+        None => vec![0; 4096],
+    };
+
+    let mut chunks_processed = 0;
+
+    for chunk_nr in 0..TILE_CHUNKS {
+        if chunks_done[chunk_nr] || tile.is_chunk_unset(chunk_nr) {
+            continue;
+        }
+
+        copy_convert_chunk(chunk_nr, &tile, out_tile, &mut converter).map_err(|e| e.to_string())?;
+
+        chunks_done[chunk_nr] = true;
+        chunks_processed += 1;
+    }
+
+    Ok(chunks_processed)
+}
+
+fn merge_keys_and_build_converter(keys_out: &mut KeysMap, keys_in: &KeysMap) -> Vec<u16> {
     let len_in = 1 + *keys_in.values().max().unwrap_or(&0) as usize;
     let mut next_id = keys_out.len() as u16;
     let mut converter = vec![0; len_in];
@@ -275,17 +279,18 @@ fn merge_keys(keys_out: &mut HashMap<String, u16>, keys_in: &HashMap<String, u16
 
 fn copy_convert_chunk(
     chunk_nr: usize,
-    converter: &Vec<u16>,
-    in_data: &TileData,
-    out_data: &mut TileData,
+    in_tile: &Tile,
+    out_tile: &mut Tile,
+    converter: &mut Vec<u16>,
 ) -> Result<(), String> {
     let chunk_start = get_chunk_start(chunk_nr);
     for line_nr in 0..CHUNK_HEIGHT {
         let line_start = chunk_start + line_nr * TILE_WIDTH * COLUMN_BYTES;
 
         {
-            let in_slice = &in_data[line_start..line_start + CHUNK_WIDTH * COLUMN_BYTES];
-            let out_slice = &mut out_data[line_start..line_start + CHUNK_WIDTH * COLUMN_BYTES];
+            let in_slice = &in_tile.columns[line_start..line_start + CHUNK_WIDTH * COLUMN_BYTES];
+            let out_slice =
+                &mut out_tile.columns[line_start..line_start + CHUNK_WIDTH * COLUMN_BYTES];
             out_slice.copy_from_slice(in_slice);
         }
 
@@ -293,28 +298,253 @@ fn copy_convert_chunk(
             let column_start = line_start + column_nr * COLUMN_BYTES;
             for block_nr in 0..4 {
                 let block_start = column_start + block_nr * 4;
-                let in_block_id =
-                    (out_data[block_start + 1] as u16) << 8 | (out_data[block_start + 2] as u16);
 
-                if in_block_id as usize >= converter.len() {
-                    return Err(format!(
-                        "Block id {} outside range {} - file corrupted?",
-                        in_block_id,
-                        converter.len()
-                    ));
-                }
+                let out_block_id = match in_tile.keys {
+                    Some(ref _keys) => {
+                        let in_block_id = (out_tile.columns[block_start + 1] as u16) << 8
+                            | (out_tile.columns[block_start + 2] as u16);
 
-                let out_block_id = converter[in_block_id as usize];
-                // TODO is branching slower than blindly writing?
-                if out_block_id != in_block_id {
-                    out_data[block_start + 1] = (out_block_id >> 8) as u8;
-                    out_data[block_start + 2] = (out_block_id & 0xff) as u8;
-                }
+                        if in_block_id == 0 {
+                            continue; // no data here
+                        }
+
+                        if in_block_id as usize >= converter.len() {
+                            return Err(format!(
+                                "Block id {} outside range {} - file corrupted?",
+                                in_block_id,
+                                converter.len(),
+                            ));
+                        }
+
+                        match converter[in_block_id as usize] {
+                            0 => {
+                                // return Err(format!(
+                                panic!(format!(
+                                    "Block id {} not in converter - logic error",
+                                    in_block_id,
+                                ));
+                            }
+                            out_block_id => out_block_id,
+                        }
+                    }
+                    None => {
+                        let in_block_id = (out_tile.columns[block_start + 2] as u16) << 4
+                            | (out_tile.columns[block_start + 1] as u16) >> 4;
+
+                        if in_block_id == 0 {
+                            continue; // no data here
+                        }
+
+                        match converter[in_block_id as usize] {
+                            0 => {
+                                let name = get_block_name_from_voxelmap(
+                                    out_tile.columns[block_start + 1],
+                                    out_tile.columns[block_start + 2],
+                                ).to_string();
+
+                                let out_keys = out_tile.keys.as_mut().unwrap();
+                                let next_id = 1 + out_keys.len() as u16;
+                                let out_block_id = out_keys.entry(name).or_insert(next_id);
+
+                                converter[in_block_id as usize] = *out_block_id;
+
+                                *out_block_id
+                            }
+                            out_block_id => out_block_id,
+                        }
+                    }
+                };
+
+                // TODO is branching faster than blindly writing?
+                // if out_block_id != in_block_id {
+                out_tile.columns[block_start + 1] = (out_block_id >> 8) as u8;
+                out_tile.columns[block_start + 2] = (out_block_id & 0xff) as u8;
+                // }
             }
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_convert_chunk_works_for_global_key() {
+        let mut in_tile = Tile {
+            source: None,
+            pos: None,
+            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
+            keys: None,
+        };
+        let mut out_tile = Tile {
+            source: None,
+            pos: None,
+            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
+            keys: Some(HashMap::new()),
+        };
+        let mut converter = vec![0; 4096];
+
+        let foo = 17 * (256 * 2 * 16 + 16);
+        in_tile.columns[foo + 0] = 2; // height
+        in_tile.columns[foo + 1] = 1;
+        in_tile.columns[foo + 2] = 1;
+        in_tile.columns[foo + 3] = 14; // light
+        in_tile.columns[foo + 16] = 23; // biome
+
+        let bar = foo + 17 * (256 + 2);
+        in_tile.columns[bar + 1] = 1;
+        in_tile.columns[bar + 2] = 1;
+
+        let baz = foo + 17 * (256 + 3);
+        in_tile.columns[baz + 1] = 0;
+        in_tile.columns[baz + 2] = 2;
+
+        assert_eq!(
+            Ok(()),
+            copy_convert_chunk(33, &in_tile, &mut out_tile, &mut converter)
+        );
+
+        // biome, height, light are copied
+        assert_eq!(23, out_tile.columns[foo + 16]);
+        assert_eq!(2, out_tile.columns[foo + 0]);
+        assert_eq!(14, out_tile.columns[foo + 3]);
+
+        // foo block is first in out key
+        assert_eq!(0, out_tile.columns[foo + 1]);
+        assert_eq!(1, out_tile.columns[foo + 2]);
+
+        // null is still null
+        assert_eq!(0, out_tile.columns[foo + 1 + 17]);
+        assert_eq!(0, out_tile.columns[foo + 2 + 17]);
+
+        // ids get reused
+        assert_eq!(0, out_tile.columns[bar + 1]);
+        assert_eq!(1, out_tile.columns[bar + 2]);
+
+        // baz block is second entry after foo/bar
+        assert_eq!(0, out_tile.columns[baz + 1]);
+        assert_eq!(2, out_tile.columns[baz + 2]);
+    }
+
+    #[test]
+    fn merge_two_tiles_works_for_tile_key() {
+        let mut in_keys = HashMap::new();
+        in_keys.insert("test id 42".to_string(), 42);
+        in_keys.insert("test id 123".to_string(), 123);
+
+        let mut in_tile = Tile {
+            source: None,
+            pos: None,
+            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
+            keys: Some(in_keys),
+        };
+        let mut out_tile = Tile {
+            source: None,
+            pos: None,
+            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
+            keys: Some(HashMap::new()),
+        };
+        let mut chunks_done = vec![false; TILE_CHUNKS];
+
+        let foo = 17 * (256 * 2 * 16 + 16);
+        in_tile.columns[foo + 0] = 2; // height
+        in_tile.columns[foo + 1] = 0;
+        in_tile.columns[foo + 2] = 42;
+        in_tile.columns[foo + 3] = 14; // light
+        in_tile.columns[foo + 16] = 23; // biome
+
+        let bar = foo + 17 * (256 + 2);
+        in_tile.columns[bar + 1] = 0;
+        in_tile.columns[bar + 2] = 42;
+
+        let baz = foo + 17 * (256 + 3);
+        in_tile.columns[baz + 1] = 0;
+        in_tile.columns[baz + 2] = 123;
+
+        assert_eq!(
+            Ok(1),
+            merge_two_tiles(&in_tile, &mut out_tile, &mut chunks_done)
+        );
+
+        // biome, height, light are copied
+        assert_eq!(23, out_tile.columns[foo + 16]);
+        assert_eq!(2, out_tile.columns[foo + 0]);
+        assert_eq!(14, out_tile.columns[foo + 3]);
+
+        // foo block is first in out key
+        assert_eq!(0, out_tile.columns[foo + 1]);
+        assert_eq!(1, out_tile.columns[foo + 2]);
+
+        // null is still null
+        assert_eq!(0, out_tile.columns[foo + 1 + 17]);
+        assert_eq!(0, out_tile.columns[foo + 2 + 17]);
+
+        // ids get reused
+        assert_eq!(0, out_tile.columns[bar + 1]);
+        assert_eq!(1, out_tile.columns[bar + 2]);
+
+        // baz block is second entry after foo/bar
+        assert_eq!(0, out_tile.columns[baz + 1]);
+        assert_eq!(2, out_tile.columns[baz + 2]);
+    }
+
+    #[test]
+    fn is_chunk_unset_works_for_global_key() {
+        let mut in_tile = Tile {
+            source: None,
+            pos: None,
+            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
+            keys: None,
+        };
+
+        let foo = 17 * (256 * 2 * 16 + 16);
+        in_tile.columns[foo + 0] = 2; // height
+        in_tile.columns[foo + 1] = 0;
+        in_tile.columns[foo + 2] = 42;
+        in_tile.columns[foo + 3] = 14; // light
+        in_tile.columns[foo + 16] = 23; // biome
+
+        assert_eq!(true, in_tile.is_chunk_unset(0));
+        assert_eq!(false, in_tile.is_chunk_unset(33));
+    }
+
+    #[test]
+    fn is_chunk_unset_works_for_tile_key() {
+        let mut in_keys = HashMap::new();
+        in_keys.insert("test id 42".to_string(), 42);
+        in_keys.insert("minecraft:air".to_string(), 123);
+
+        let mut in_tile = Tile {
+            source: None,
+            pos: None,
+            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
+            keys: Some(in_keys),
+        };
+
+        let foo = 17 * (256 * 2 * 16 + 16);
+        in_tile.columns[foo + 0] = 2; // height
+        in_tile.columns[foo + 1] = 0;
+        in_tile.columns[foo + 2] = 42;
+        in_tile.columns[foo + 3] = 14; // light
+        in_tile.columns[foo + 16] = 23; // biome
+
+        let bar = foo + 32;
+        in_tile.columns[bar + 1] = 0;
+        in_tile.columns[bar + 2] = 123;
+
+        assert_eq!(true, in_tile.is_chunk_unset(0)); // all-zeroes
+        assert_eq!(false, in_tile.is_chunk_unset(33)); // foo is set
+        assert_eq!(true, in_tile.is_chunk_unset(35)); // bar has air block
+    }
+}
+
+fn get_block_name_from_voxelmap(vm_a: u8, vm_b: u8) -> &'static str {
+    // BLOCK_STRINGS_ARR is id << 4 | meta
+    // voxelmap is meta << 12 | id
+    BLOCK_STRINGS_ARR[(vm_b as usize) << 4 | (vm_a as usize) >> 4]
 }
 
 const PROGRESS_INTERVAL: u64 = 3;
@@ -354,13 +584,14 @@ pub const TILE_CHUNKS: usize = CHUNKS_PER_TILE_WIDTH * CHUNKS_PER_TILE_HEIGHT;
 pub const COLUMN_BYTES: usize = 17;
 
 pub type TilePos = (i32, i32);
-pub type TileData = [u8; TILE_COLUMNS * COLUMN_BYTES];
+pub type TileDataBytes = Vec<u8>;
+pub type KeysMap = HashMap<String, u16>;
 
 pub struct Tile {
     source: Option<PathBuf>,
     pos: Option<TilePos>,
-    columns: TileData,
-    keys: HashMap<String, u16>,
+    columns: TileDataBytes,
+    keys: Option<KeysMap>,
 }
 
 const AIR_STR: &str = "minecraft:air";
@@ -377,10 +608,10 @@ impl Tile {
         let height = self.columns[chunk_start];
         let block_nr =
             (self.columns[chunk_start + 1] as u16) << 8 | (self.columns[chunk_start + 2] as u16);
-        let is_air = self
-            .keys
-            .get(AIR_STR)
-            .map_or(true, |air_nr| *air_nr == block_nr);
+        let is_air = block_nr == 0 || match self.keys {
+            Some(ref keys) => keys.get(AIR_STR).map_or(true, |air_nr| *air_nr == block_nr),
+            None => false,
+        };
         return height == 0 && is_air;
     }
 }
@@ -389,7 +620,7 @@ impl std::fmt::Debug for Tile {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt.write_str(&format!(
             "Tile with {} keys{}{}",
-            self.keys.len(),
+            self.keys.as_ref().map_or(0, |k| k.len()),
             match &self.pos {
                 Some(pos) => format!(" at {:?}", pos),
                 None => "".to_owned(),
@@ -408,19 +639,8 @@ pub fn read_tile(tile_path: &PathBuf) -> Result<Box<Tile>, String> {
     let zip_file = fs::File::open(&tile_path).map_err(|e| e.to_string())?;
     let mut zip_archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
-    let mut tile = Box::new(Tile {
-        source: Some(tile_path.clone()),
-        pos: get_xz_from_tile_path(tile_path).ok(),
-        columns: [0; TILE_COLUMNS * COLUMN_BYTES],
-        keys: HashMap::new(),
-    });
-
-    {
-        // TODO convert key from old VoxelMap format
-        let key_file = zip_archive
-            .by_name("key")
-            .map_err(|_e| "Old VoxelMap format (no key file in zip)")?;
-
+    let keys = zip_archive.by_name("key").ok().map(|key_file| {
+        let mut keys = Box::new(HashMap::new());
         // TODO which one is faster?
         // let mut key_text = String::new();
         // key_file.read_to_string(&mut key_text);
@@ -440,17 +660,27 @@ pub fn read_tile(tile_path: &PathBuf) -> Result<Box<Tile>, String> {
                 .next()
                 .expect("getting block name from key line split")
                 .to_string();
-            tile.keys.insert(block_name, block_nr);
+            keys.insert(block_name, block_nr);
         }
-    }
+        *keys
+    });
+
+    let mut columns = vec![0; TILE_COLUMNS * COLUMN_BYTES];
     {
         let mut data_file = zip_archive
             .by_name("data")
             .map_err(|_e| "No data file in tile zip")?;
         data_file
-            .read_exact(&mut tile.columns)
+            .read_exact(&mut *columns)
             .map_err(|e| e.to_string())?;
     }
+
+    let tile = Box::new(Tile {
+        source: Some(tile_path.clone()),
+        pos: get_xz_from_tile_path(tile_path).ok(),
+        columns: columns,
+        keys: keys,
+    });
 
     Ok(tile)
 }
@@ -474,10 +704,13 @@ pub fn write_tile(tile_path: &PathBuf, tile: &Tile) -> Result<(), String> {
     zip_archive
         .start_file("key", options)
         .map_err(|e| e.to_string())?;
-    for (name, nr) in &tile.keys {
-        zip_archive
-            .write_fmt(format_args!("{} {}\r\n", nr, name))
-            .map_err(|e| e.to_string())?;
+
+    if let Some(keys) = &tile.keys {
+        for (name, nr) in keys {
+            zip_archive
+                .write_fmt(format_args!("{} {}\r\n", nr, name))
+                .map_err(|e| e.to_string())?;
+        }
     }
 
     // Optionally finish the zip. (this is also done on drop)
