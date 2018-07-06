@@ -43,6 +43,8 @@ def hardlink_cache(main_cache, contrib, src_path, verbose):
     dest_path = '%s/%s,%s.zip' % (main_cache, coords, contrib)
     try:
         os.link(src_path, dest_path)
+        mtime = os.path.getmtime(src_path)
+        os.utime(dest, (mtime, mtime))
     except FileExistsError:
         if verbose: print('! Skipping existing', src_path, dest_path)
     except Exception as e:
