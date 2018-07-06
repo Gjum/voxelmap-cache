@@ -762,7 +762,13 @@ pub fn get_tile_paths_in_dirs(
         for zip_dir_entry in fs::read_dir(dir.as_str()).map_err(|e| e.to_string())? {
             let tile_path = zip_dir_entry.map_err(|e| e.to_string())?.path();
             match get_xz_from_tile_path(&tile_path) {
-                Ok(_pos) => tile_paths.push_back(tile_path),
+                Ok(_pos) => {
+                    if tile_path.to_string_lossy().ends_with(".zip") {
+                        tile_paths.push_back(tile_path)
+                    } else {
+                        println!("Ignoring non-tile file {:?}", &tile_path);
+                    }
+                }
                 Err(e) => {
                     if tile_path.to_string_lossy().ends_with("_chunk-times.gz") {
                         // ignore chunk timestamp info file
