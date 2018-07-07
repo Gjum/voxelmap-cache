@@ -728,12 +728,12 @@ fn get_xz_from_tile_path(tile_path: &PathBuf) -> Result<TilePos, String> {
     let mut it = coords_part.splitn(3, ',');
     let x = it
         .next()
-        .unwrap()
+        .ok_or("no x coord in filename".to_owned())?
         .parse()
         .map_err(|e: std::num::ParseIntError| e.to_string())?;
     let z = it
         .next()
-        .unwrap()
+        .ok_or("no z coord in filename".to_owned())?
         .parse()
         .map_err(|e: std::num::ParseIntError| e.to_string())?;
     Ok((x, z))
