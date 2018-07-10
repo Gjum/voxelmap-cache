@@ -104,41 +104,29 @@ fn main() {
     }
 
     // start with most intense tile positions first (most contribs per tile)
-    let mut sorted_by_tiles_per_pos: Vec<(TilePos, Vec<PathBuf>)> =
-        tile_paths_by_pos.into_iter().collect();
-    sorted_by_tiles_per_pos.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
+    let mut paths_sorted: Vec<(TilePos, Vec<PathBuf>)> = tile_paths_by_pos.into_iter().collect();
+    paths_sorted.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
 
     let mut skipped_contribs = HashMap::new();
     let mut total_used = 0;
 
     let mut next_msg_elapsed = PROGRESS_INTERVAL;
 
-    // TODO >>>>>>>>>>
+    let pool = ThreadPool::new(args.arg_threads.unwrap_or(4));
+    let (tx, rx) = channel();
 
-    // let pool = ThreadPool::new(args.arg_threads.unwrap_or(4));
-    // let (tx, rx) = channel();
-
-    // for (pos, tile_paths) in sorted_by_tiles_per_pos.into_iter() {
-    //     let tx = tx.clone();
-    //     let (x, z) = pos;
-    //     let out_path = PathBuf::from(format!("{}/{},{}.zip", args.arg_output_path, x, z));
-    //     pool.execute(move || {
-    //         let result = merge_all_tiles(out_path, tile_paths);
-    //         tx.send(result).expect("Sending result");
-    //     });
-    // }
-
-    // for work_done in 0..total_work {
-    //     let (_out_path, used, skipped) = rx.recv().expect("Receiving next result");
-
-    // TODO ==========
-
-    for (work_done, (pos, tile_paths)) in sorted_by_tiles_per_pos.into_iter().enumerate() {
+    for (pos, tile_paths) in paths_sorted.into_iter() {
+        let tx = tx.clone();
         let (x, z) = pos;
         let out_path = PathBuf::from(format!("{}/{},{}.zip", args.arg_output_path, x, z));
-        let (_out_path, used, skipped) = merge_all_tiles(out_path, tile_paths);
+        pool.execute(move || {
+            let result = merge_all_tiles(out_path, tile_paths);
+            tx.send(result).expect("Sending result");
+        });
+    }
 
-        // TODO <<<<<<<<<<
+    for work_done in 0..total_work {
+        let (_out_path, used, skipped) = rx.recv().expect("Receiving next result");
 
         for (path, err) in skipped {
             let contrib = get_contrib_from_tile_path(&path).unwrap_or(String::new());
@@ -747,7 +735,7 @@ fn get_xz_from_tile_path(tile_path: &PathBuf) -> Result<TilePos, String> {
 fn get_contrib_from_tile_path(tile_path: &PathBuf) -> Result<String, String> {
     let fname = tile_path.file_name().unwrap().to_str().unwrap();
     if fname.len() <= 4 {
-        return Err("file name too short".to_owned());
+        return Err("no contrib in filename".to_owned());
     }
     let (coords_part, _) = fname.split_at(fname.len() - 4);
     Ok(coords_part
