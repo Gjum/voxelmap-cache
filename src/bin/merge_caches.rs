@@ -72,13 +72,8 @@ fn main() {
     let tile_paths: Vec<PathBuf> = tile_paths
         .into_iter()
         .filter(|path| {
-            let (tile_x, tile_z) = get_xz_from_tile_path(path).expect("getting pos from tile path");
-            let tw = TILE_WIDTH as i32;
-            let th = TILE_HEIGHT as i32;
-            let x = tile_x * tw;
-            let z = tile_z * th;
-            let (w, n, e, s) = (bounds[0], bounds[1], bounds[2], bounds[3]);
-            x + tw > w && x < e && z + th > n && z < s
+            let tile_pos = get_xz_from_tile_path(path).expect("getting pos from tile path");
+            is_tile_pos_in_bounds(tile_pos, &bounds)
         })
         .collect();
 
@@ -172,6 +167,16 @@ fn main() {
             total_min, total_sec, total_used, tile_ms,
         );
     };
+}
+
+pub fn is_tile_pos_in_bounds((tile_x, tile_z): (i32, i32), bounds: &Vec<i32>) -> bool {
+    let tw = TILE_WIDTH as i32;
+    let th = TILE_HEIGHT as i32;
+    let x = tile_x * tw;
+    let z = tile_z * th;
+    let (w, n, e, s) = (bounds[0], bounds[1], bounds[2], bounds[3]);
+
+    x + tw > w && x < e && z + th > n && z < s
 }
 
 pub fn merge_all_tiles(
