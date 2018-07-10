@@ -86,6 +86,14 @@ fn main() {
             .push(tile_path.clone());
     }
 
+    fs::create_dir_all(&args.arg_output_path).unwrap_or_else(|e| {
+        println!(
+            "Failed to create output directory {:?} {:?}",
+            &args.arg_output_path, e
+        );
+        std::process::exit(1);
+    });
+
     let total_work = tile_paths_by_pos.len();
     if verbose {
         println!(
@@ -99,14 +107,6 @@ fn main() {
     let mut sorted_by_tiles_per_pos: Vec<(TilePos, Vec<PathBuf>)> =
         tile_paths_by_pos.into_iter().collect();
     sorted_by_tiles_per_pos.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
-
-    fs::create_dir_all(&args.arg_output_path).unwrap_or_else(|e| {
-        println!(
-            "Failed to create output directory {:?} {:?}",
-            &args.arg_output_path, e
-        );
-        std::process::exit(1);
-    });
 
     let mut skipped_contribs = HashMap::new();
     let mut total_used = 0;
