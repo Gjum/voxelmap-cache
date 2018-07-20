@@ -27,8 +27,8 @@ Usage: merge_caches [-q] [-t threads] [--between=<bounds>] <output-path> <cache-
 cache-path contains voxelmap caches in the format `<x>,<z>,<contrib-name>.zip`
 
 Options:
-    -q, --quiet  Do not output info messages.
-    -t           Number of threads to use for parallel processing
+    -q, --quiet         Do not output info messages.
+    -t, --threads       Number of threads to use for parallel processing
     --between=<bounds>  Only merge tiles at least partially within this bounding box,
                         format: w,n,e,s [default: -99999,-99999,99999,99999]
 ";
@@ -62,10 +62,7 @@ fn main() {
 
     let tile_paths: Vec<PathBuf> = tile_paths
         .into_iter()
-        .filter(|path| {
-            let tile_pos = get_xz_from_tile_path(path).expect("getting pos from tile path");
-            is_tile_pos_in_bounds(tile_pos, &bounds)
-        })
+        .filter(|path| is_tile_pos_in_bounds(get_xz_from_tile_path(path).unwrap(), &bounds))
         .collect();
 
     let mut tile_paths_by_pos = Box::new(HashMap::new());
@@ -92,9 +89,10 @@ fn main() {
     let total_work = paths_sorted.len();
     if verbose {
         println!(
-            "Merging {:?} tiles across {:?} tile positions",
+            "Merging {:?} tiles across {:?} tile positions into {:?}",
             tile_paths.len(),
-            total_work
+            total_work,
+            &args.arg_output_path
         )
     }
 
@@ -138,7 +136,7 @@ fn main() {
         let time_total = start_time.elapsed();
         let total_min = time_total.as_secs() / 60;
         let total_sec = time_total.as_secs() % 60;
-        let time_per_work_item = time_total / total_work as u32;
+        let time_per_work_item = time_total / total_used as u32;
         let tile_ms = time_per_work_item.as_secs() * 1_000
             + time_per_work_item.subsec_nanos() as u64 / 1_000_000;
         println!(
