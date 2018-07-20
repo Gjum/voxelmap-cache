@@ -1,64 +1,55 @@
 // use biomes::BIOME_COLOR_TABLE;
-use blocks::{BLOCK_COLOR_TABLE, BLOCK_OPACITY_TABLE};
+use std::u16;
+use tile::{is_empty as is_empty_option, KeysMap};
 
-pub fn is_empty(column: &[u8]) -> bool {
-    return column[1] == 0 && column[2] == 0; // block is air
+fn is_empty(column: &[u8], keys: &KeysMap) -> bool {
+    is_empty_option(column, Some(keys))
+}
+
+fn is_water(column: &[u8], keys: &KeysMap) -> bool {
+    let block_nr = (column[1] as u16) << 8 | (column[2] as u16);
+    return block_nr == *keys.get("minecraft:water[level=0]").unwrap_or(&u16::MAX);
 }
 
 // pub fn biome(column: &[u8]) -> u32 {
-//     if is_empty(column) {
+//     if is_empty(column, keys) {
 //         return 0;
 //     }
 //     let b = column[16];
 //     BIOME_COLOR_TABLE[b as usize]
 // }
 
-pub fn terrain(column: &[u8]) -> u32 {
-    if is_empty(column) {
-        return 0;
-    }
-    let idmeta = (column[1] as usize) << 8 | column[2] as usize;
-    let id = idmeta & 0x0fff;
-    let meta = idmeta >> 12;
-    let index = id << 4 | meta;
-    BLOCK_COLOR_TABLE[index]
-    // wtf the colors are wrong why does journeymap work with them?
 
-    // TODO other layers too
-    // TODO relief shadows
-    // let color = BLOCK_COLOR_TABLE[index];
-    // let alpha = BLOCK_OPACITY_TABLE[id];
-    // color | ((alpha as u32) << 24)
-}
 
-const S_SHALLOW: u32 = 0xff_ee_d5_c6;
 const S_WATER: u32 = 0xff_ff_c5_a6; // #a6c5ff
 const S_LAND: u32 = 0xff_dc_e4_e7; // #e7e4dc
 
-pub fn simple(column: &[u8]) -> u32 {
-    if is_empty(column) {
+pub fn simple(column: &[u8], keys: &KeysMap) -> u32 {
+    if is_empty(column, keys) {
         return 0;
     }
-    let b = column[0 + 2];
-    if b == 8 || b == 9 {
+    if is_water(column, keys) {
         return S_WATER;
     }
     return S_LAND;
 }
 
-pub fn light(column: &[u8]) -> u32 {
-    if is_empty(column) {
+pub fn light(column: &[u8], keys: &KeysMap) -> u32 {
+    if is_empty(column, keys) {
         return 0;
     }
     let bl = column[3] & 0xf;
     rgb(bl * 17, bl * 17, bl * 17)
 }
 
-pub fn heightmap_grayscale(column: &[u8]) -> u32 {
-    if is_empty(column) {
+pub fn height_bw(column: &[u8], keys: &KeysMap) -> u32 {
+    if is_empty(column, keys) {
         return 0;
     }
-    let h = column[0];
+    let mut h = column[0];
+    if h == 0 {
+        h = 255 // 0 = 256 = actually at height limit
+    }
     rgb(h, h, h)
 }
 
@@ -70,33 +61,32 @@ const MID_COLOR: u32 = 0xff_00_ff_ff; // #ffff00 yellow
 const COAST_COLOR: u32 = 0xff_00_b6_00; // #00b600 dark green
 const SEA_COLOR: u32 = 0xff_ff_d9_00; // #00d9ff light blue
 
-// const HIGH_LEVEL: u8 = 240;
-// const MTN_LEVEL: u8 = 150;
-// const MID_LEVEL: u8 = 100;
-// const SEA_LEVEL: u8 = 32;
-
 const HIGH_LEVEL: u8 = 240;
 const MTN_LEVEL: u8 = 150;
 const MID_LEVEL: u8 = 100;
 const SEA_LEVEL: u8 = 64;
 
-fn height(column: &[u8]) -> u32 {
-    if is_empty(column) {
+fn height(column: &[u8], keys: &KeysMap) -> u32 {
+    if is_empty(column, keys) {
         return 0; // unpopulated
     }
 
-    // surface height
-    let h = match column[0] {
-        0 => 255, // wrapped around
-        h => h,
-    };
-
-    // seafloor height
-    let sf = column[4];
-
-    let b = column[0 + 2]; // block type
-    if b != 8 && b != 9 {
+    if is_water(column, keys) {
+        let sf = column[4]; // seafloor height
+        if sf < SEA_LEVEL {
+            interpolate(BLACK, SEA_COLOR, 0, SEA_LEVEL, sf)
+        } else {
+            SEA_COLOR
+        }
+    } else {
         // land
+
+        // surface height
+        let h = match column[0] {
+            0 => 255, // wrapped around
+            h => h,
+        };
+
         if h < SEA_LEVEL {
             interpolate(BLACK, COAST_COLOR, 0, SEA_LEVEL, h)
         } else if h < MID_LEVEL {
@@ -107,13 +97,6 @@ fn height(column: &[u8]) -> u32 {
             interpolate(MTN_COLOR, WHITE, MTN_LEVEL, HIGH_LEVEL, h)
         } else {
             interpolate(WHITE, SKY_COLOR, HIGH_LEVEL, 255, h)
-        }
-    } else {
-        // water
-        if sf < SEA_LEVEL {
-            interpolate(BLACK, SEA_COLOR, 0, SEA_LEVEL, sf)
-        } else {
-            SEA_COLOR
         }
     }
 }
@@ -153,19 +136,19 @@ fn rgb(r: u8, g: u8, b: u8) -> u32 {
 pub enum Colorizer {
     // Biome,
     Height,
+    HeightBW,
     Light,
     Simple,
-    Terrain,
 }
 
 impl Colorizer {
-    pub fn column_color_fn(&self) -> Box<Fn(&[u8]) -> u32> {
+    pub fn get_column_color_fn(&self) -> Box<Fn(&[u8], &KeysMap) -> u32> {
         Box::new(match *self {
             // Colorizer::Biome => biome,
             Colorizer::Height => height,
+            Colorizer::HeightBW => height_bw,
             Colorizer::Light => light,
             Colorizer::Simple => simple,
-            Colorizer::Terrain => terrain,
         })
     }
 }

@@ -1,3 +1,5 @@
+pub const AIR_STR: &str = "minecraft:air";
+
 /*
 indices are id << 4 | meta
 

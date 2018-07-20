@@ -8,6 +8,7 @@ use std::time::{Instant, SystemTime};
 use tile::{TilePos, TILE_HEIGHT, TILE_WIDTH};
 
 pub mod blocks;
+pub mod colorizer;
 pub mod tile;
 
 pub fn get_block_name_from_voxelmap(vm_a: u8, vm_b: u8) -> &'static str {

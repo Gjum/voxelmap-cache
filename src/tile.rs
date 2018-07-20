@@ -1,6 +1,7 @@
 extern crate zip;
 
 use super::get_xz_from_tile_path;
+use blocks::AIR_STR;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
@@ -28,16 +29,20 @@ pub struct Tile {
     pub keys: Option<KeysMap>,
 }
 
+pub fn is_empty(column: &[u8], keys: Option<&KeysMap>) -> bool {
+    let height = column[0];
+    let block_nr = (column[1] as u16) << 8 | (column[2] as u16);
+    let is_air = block_nr == 0 || match keys {
+        Some(ref keys) => keys.get(AIR_STR).map_or(true, |air_nr| *air_nr == block_nr),
+        None => false,
+    };
+    return height == 0 && is_air;
+}
+
 impl Tile {
     pub fn is_unset(&self, column_start: usize) -> bool {
-        let height = self.columns[column_start];
-        let block_nr =
-            (self.columns[column_start + 1] as u16) << 8 | (self.columns[column_start + 2] as u16);
-        let is_air = block_nr == 0 || match self.keys {
-            Some(ref keys) => keys.get(AIR_STR).map_or(true, |air_nr| *air_nr == block_nr),
-            None => false,
-        };
-        return height == 0 && is_air;
+        let column = &self.columns[column_start..column_start + COLUMN_BYTES];
+        return is_empty(column, self.keys.as_ref());
     }
 }
 
@@ -57,8 +62,6 @@ impl fmt::Debug for Tile {
         ))
     }
 }
-
-pub const AIR_STR: &str = "minecraft:air";
 
 pub fn get_chunk_start(chunk_nr: usize) -> usize {
     let chunk_start_col = (chunk_nr * CHUNK_WIDTH) % TILE_WIDTH
