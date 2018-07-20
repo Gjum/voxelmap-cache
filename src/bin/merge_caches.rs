@@ -11,11 +11,14 @@ use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
+use voxelmap_cache::tile::{
+    get_chunk_start, read_tile, write_tile, KeysMap, Tile, TilePos, CHUNK_HEIGHT, CHUNK_WIDTH,
+    COLUMN_BYTES, TILE_CHUNKS, TILE_COLUMNS, TILE_WIDTH,
+};
 use voxelmap_cache::{
-    get_block_name_from_voxelmap, get_chunk_start, get_contrib_from_tile_path, get_mtime_or_0,
+    get_block_name_from_voxelmap, get_contrib_from_tile_path, get_mtime_or_0,
     get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, parse_bounds,
-    print_progress, read_tile, write_tile, KeysMap, Tile, TilePos, CHUNK_HEIGHT, CHUNK_WIDTH,
-    COLUMN_BYTES, PROGRESS_INTERVAL, TILE_CHUNKS, TILE_COLUMNS, TILE_WIDTH,
+    print_progress, PROGRESS_INTERVAL,
 };
 
 const USAGE: &'static str = "
