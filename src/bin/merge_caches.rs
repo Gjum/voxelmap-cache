@@ -52,26 +52,10 @@ fn main() {
         std::process::exit(1);
     });
 
-    let bounds = args
-        .flag_between
-        .splitn(4, ",")
-        .map(str::parse)
-        .collect::<Result<Vec<i32>, _>>()
-        .unwrap_or_else(|e| {
-            println!(
-                "Invalid arg: between: {} {}",
-                &args.flag_between,
-                e.to_string()
-            );
-            std::process::exit(1);
-        });
-    if bounds.len() != 4 || bounds[0] > bounds[2] || bounds[1] > bounds[3] {
-        println!(
-            "Invalid arg: between: {} should be: w,n,e,s",
-            &args.flag_between
-        );
+    let bounds = parse_bounds(&args.flag_between).unwrap_or_else(|e| {
+        println!("Invalid arg: --between={} {}", &args.flag_between, e);
         std::process::exit(1);
-    }
+    });
 
     let tile_paths: Vec<PathBuf> = tile_paths
         .into_iter()
@@ -90,6 +74,10 @@ fn main() {
             .push(tile_path.clone());
     }
 
+    // start with most intense tile positions first (most contribs per tile)
+    let mut paths_sorted: Vec<(TilePos, Vec<PathBuf>)> = tile_paths_by_pos.into_iter().collect();
+    paths_sorted.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
+
     fs::create_dir_all(&args.arg_output_path).unwrap_or_else(|e| {
         println!(
             "Failed to create output directory {:?} {:?}",
@@ -98,7 +86,7 @@ fn main() {
         std::process::exit(1);
     });
 
-    let total_work = tile_paths_by_pos.len();
+    let total_work = paths_sorted.len();
     if verbose {
         println!(
             "Merging {:?} tiles across {:?} tile positions",
@@ -106,10 +94,6 @@ fn main() {
             total_work
         )
     }
-
-    // start with most intense tile positions first (most contribs per tile)
-    let mut paths_sorted: Vec<(TilePos, Vec<PathBuf>)> = tile_paths_by_pos.into_iter().collect();
-    paths_sorted.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
 
     let mut skipped_contribs = HashMap::new();
     let mut total_used = 0;
@@ -161,7 +145,24 @@ fn main() {
     };
 }
 
-pub fn is_tile_pos_in_bounds((tile_x, tile_z): (i32, i32), bounds: &Vec<i32>) -> bool {
+fn parse_bounds(bounds_str: &str) -> Result<Vec<i32>, String> {
+    let bounds = bounds_str
+        .splitn(4, ",")
+        .map(|s| match &s[0..1] {
+            "t" => s[1..].parse::<i32>().map(|c| c * TILE_WIDTH as i32 + 42), // convert tile coords to world coords
+            _ => s.parse(),
+        })
+        .collect::<Result<Vec<i32>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    if bounds.len() != 4 || bounds[0] > bounds[2] || bounds[1] > bounds[3] {
+        Err("should be: w,n,e,s".to_string())
+    } else {
+        Ok(bounds)
+    }
+}
+
+fn is_tile_pos_in_bounds((tile_x, tile_z): (i32, i32), bounds: &Vec<i32>) -> bool {
     let tw = TILE_WIDTH as i32;
     let th = TILE_HEIGHT as i32;
     let x = tile_x * tw;
@@ -369,6 +370,20 @@ fn copy_convert_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_bounds_with_world_coords() {
+        let bounds_str = "1,-22222,33333,-4";
+        let bounds = parse_bounds(bounds_str);
+        assert_eq!(Ok(vec![1, -22222, 33333, -4]), bounds);
+    }
+
+    #[test]
+    fn parse_bounds_with_tile_coords() {
+        let bounds_str = "t-2,t-33,t4,t5";
+        let bounds = parse_bounds(bounds_str);
+        assert_eq!(Ok(vec![-470, -8406, 1066, 1322]), bounds);
+    }
 
     #[test]
     fn copy_convert_chunk_works_for_global_key() {
