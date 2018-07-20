@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
-use voxelmap_cache::blocks::BLOCK_STRINGS_ARR;
 use voxelmap_cache::{
-    get_chunk_start, get_contrib_from_tile_path, get_mtime_or_0, get_tile_paths_in_dirs,
-    get_xz_from_tile_path, read_tile, write_tile, KeysMap, Tile, TilePos, CHUNK_HEIGHT,
-    CHUNK_WIDTH, COLUMN_BYTES, TILE_CHUNKS, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH,
+    get_block_name_from_voxelmap, get_chunk_start, get_contrib_from_tile_path, get_mtime_or_0,
+    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, parse_bounds,
+    print_progress, read_tile, write_tile, KeysMap, Tile, TilePos, CHUNK_HEIGHT, CHUNK_WIDTH,
+    COLUMN_BYTES, PROGRESS_INTERVAL, TILE_CHUNKS, TILE_COLUMNS, TILE_WIDTH,
 };
 
 const USAGE: &'static str = "
@@ -143,33 +143,6 @@ fn main() {
             total_min, total_sec, total_used, tile_ms,
         );
     };
-}
-
-fn parse_bounds(bounds_str: &str) -> Result<Vec<i32>, String> {
-    let bounds = bounds_str
-        .splitn(4, ",")
-        .map(|s| match &s[0..1] {
-            "t" => s[1..].parse::<i32>().map(|c| c * TILE_WIDTH as i32 + 42), // convert tile coords to world coords
-            _ => s.parse(),
-        })
-        .collect::<Result<Vec<i32>, _>>()
-        .map_err(|e| e.to_string())?;
-
-    if bounds.len() != 4 || bounds[0] > bounds[2] || bounds[1] > bounds[3] {
-        Err("should be: w,n,e,s".to_string())
-    } else {
-        Ok(bounds)
-    }
-}
-
-fn is_tile_pos_in_bounds((tile_x, tile_z): (i32, i32), bounds: &Vec<i32>) -> bool {
-    let tw = TILE_WIDTH as i32;
-    let th = TILE_HEIGHT as i32;
-    let x = tile_x * tw;
-    let z = tile_z * th;
-    let (w, n, e, s) = (bounds[0], bounds[1], bounds[2], bounds[3]);
-
-    x + tw > w && x < e && z + th > n && z < s
 }
 
 pub fn merge_all_tiles(
@@ -372,20 +345,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_bounds_with_world_coords() {
-        let bounds_str = "1,-22222,33333,-4";
-        let bounds = parse_bounds(bounds_str);
-        assert_eq!(Ok(vec![1, -22222, 33333, -4]), bounds);
-    }
-
-    #[test]
-    fn parse_bounds_with_tile_coords() {
-        let bounds_str = "t-2,t-33,t4,t5";
-        let bounds = parse_bounds(bounds_str);
-        assert_eq!(Ok(vec![-470, -8406, 1066, 1322]), bounds);
-    }
-
-    #[test]
     fn copy_convert_chunk_works_for_global_key() {
         let mut in_tile = Tile {
             source: None,
@@ -504,84 +463,4 @@ mod tests {
         assert_eq!(0, out_tile.columns[baz + 1]);
         assert_eq!(2, out_tile.columns[baz + 2]);
     }
-
-    #[test]
-    fn is_chunk_unset_works_for_global_key() {
-        let mut in_tile = Tile {
-            source: None,
-            pos: None,
-            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
-            keys: None,
-        };
-
-        let foo = 17 * (256 * 2 * 16 + 16);
-        in_tile.columns[foo + 0] = 2; // height
-        in_tile.columns[foo + 1] = 0;
-        in_tile.columns[foo + 2] = 42;
-        in_tile.columns[foo + 3] = 14; // light
-        in_tile.columns[foo + 16] = 23; // biome
-
-        assert_eq!(true, in_tile.is_chunk_unset(0));
-        assert_eq!(false, in_tile.is_chunk_unset(33));
-    }
-
-    #[test]
-    fn is_chunk_unset_works_for_tile_key() {
-        let mut in_keys = HashMap::new();
-        in_keys.insert("test id 42".to_string(), 42);
-        in_keys.insert("minecraft:air".to_string(), 123);
-
-        let mut in_tile = Tile {
-            source: None,
-            pos: None,
-            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
-            keys: Some(in_keys),
-        };
-
-        let foo = 17 * (256 * 2 * 16 + 16);
-        in_tile.columns[foo + 0] = 2; // height
-        in_tile.columns[foo + 1] = 0;
-        in_tile.columns[foo + 2] = 42;
-        in_tile.columns[foo + 3] = 14; // light
-        in_tile.columns[foo + 16] = 23; // biome
-
-        let bar = foo + 32;
-        in_tile.columns[bar + 1] = 0;
-        in_tile.columns[bar + 2] = 123;
-
-        assert_eq!(true, in_tile.is_chunk_unset(0)); // all-zeroes
-        assert_eq!(false, in_tile.is_chunk_unset(33)); // foo is set
-        assert_eq!(true, in_tile.is_chunk_unset(35)); // bar has air block
-    }
-}
-
-fn get_block_name_from_voxelmap(vm_a: u8, vm_b: u8) -> &'static str {
-    // BLOCK_STRINGS_ARR is id << 4 | meta
-    // voxelmap is meta << 12 | id
-    BLOCK_STRINGS_ARR[(vm_b as usize) << 4 | (vm_a as usize) >> 4]
-}
-
-const PROGRESS_INTERVAL: u64 = 3;
-
-// TODO put more weight on recent measurements
-pub fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_elapsed: &mut u64) {
-    if total <= 0 || done == 0 {
-        return;
-    }
-
-    let elapsed = start_time.elapsed().as_secs();
-    if elapsed < *next_msg_elapsed {
-        return;
-    }
-
-    if *next_msg_elapsed < elapsed {
-        *next_msg_elapsed = elapsed;
-    }
-    *next_msg_elapsed += PROGRESS_INTERVAL;
-
-    let work_left = total - done;
-    let sec_left = elapsed as usize * work_left / done;
-    let min = sec_left / 60;
-    let sec = sec_left % 60;
-    println!("{}/{} processed, {}:{:02?} left", done, total, min, sec);
 }
