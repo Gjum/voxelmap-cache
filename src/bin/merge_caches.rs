@@ -171,6 +171,8 @@ pub fn merge_all_tiles(
     out_path: PathBuf,
     tile_paths: Vec<PathBuf>,
 ) -> (PathBuf, Vec<PathBuf>, Vec<(PathBuf, String)>) {
+    // XXX set out_path mtime to newest used tile_path
+
     if tile_paths.len() == 1 {
         // just one contrib, no merging needed, hardlink it to destination
         let tile_path = tile_paths.into_iter().next().unwrap();
