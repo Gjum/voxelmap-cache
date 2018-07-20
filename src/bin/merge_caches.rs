@@ -224,7 +224,7 @@ fn merge_two_tiles(
     let mut chunks_processed = 0;
 
     for chunk_nr in 0..TILE_CHUNKS {
-        if chunks_done[chunk_nr] || tile.is_chunk_unset(chunk_nr) {
+        if chunks_done[chunk_nr] || tile.is_unset(get_chunk_start(chunk_nr)) {
             continue;
         }
 

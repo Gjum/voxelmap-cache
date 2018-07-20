@@ -29,11 +29,10 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn is_chunk_unset(&self, chunk_nr: usize) -> bool {
-        let chunk_start = get_chunk_start(chunk_nr);
-        let height = self.columns[chunk_start];
+    pub fn is_unset(&self, column_start: usize) -> bool {
+        let height = self.columns[column_start];
         let block_nr =
-            (self.columns[chunk_start + 1] as u16) << 8 | (self.columns[chunk_start + 2] as u16);
+            (self.columns[column_start + 1] as u16) << 8 | (self.columns[column_start + 2] as u16);
         let is_air = block_nr == 0 || match self.keys {
             Some(ref keys) => keys.get(AIR_STR).map_or(true, |air_nr| *air_nr == block_nr),
             None => false,
@@ -158,7 +157,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn is_chunk_unset_works_for_global_key() {
+    fn is_unset_works_for_global_key() {
         let mut in_tile = Tile {
             source: None,
             pos: None,
@@ -173,12 +172,12 @@ mod tests {
         in_tile.columns[foo + 3] = 14; // light
         in_tile.columns[foo + 16] = 23; // biome
 
-        assert_eq!(true, in_tile.is_chunk_unset(0));
-        assert_eq!(false, in_tile.is_chunk_unset(33));
+        assert_eq!(true, in_tile.is_unset(get_chunk_start(0)));
+        assert_eq!(false, in_tile.is_unset(get_chunk_start(33)));
     }
 
     #[test]
-    fn is_chunk_unset_works_for_tile_key() {
+    fn is_unset_works_for_tile_key() {
         let mut in_keys = HashMap::new();
         in_keys.insert("test id 42".to_string(), 42);
         in_keys.insert("minecraft:air".to_string(), 123);
@@ -201,8 +200,8 @@ mod tests {
         in_tile.columns[bar + 1] = 0;
         in_tile.columns[bar + 2] = 123;
 
-        assert_eq!(true, in_tile.is_chunk_unset(0)); // all-zeroes
-        assert_eq!(false, in_tile.is_chunk_unset(33)); // foo is set
-        assert_eq!(true, in_tile.is_chunk_unset(35)); // bar has air block
+        assert_eq!(true, in_tile.is_unset(get_chunk_start(0))); // all-zeroes
+        assert_eq!(false, in_tile.is_unset(get_chunk_start(33))); // foo is set
+        assert_eq!(true, in_tile.is_unset(get_chunk_start(35))); // bar has air block
     }
 }
