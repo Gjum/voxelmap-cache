@@ -5,10 +5,20 @@ extern crate zip;
 use std::io::Read;
 use std::path::Path;
 
-use super::buf_rw::{BufErr, BufReader};
+use super::buf_rw::{BufErr, BufReader, UUID};
 
 #[derive(Debug)]
 pub enum McPacket {
+    SpawnPlayer {
+        eid: i32,
+        uuid: UUID,
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: u8,
+        pitch: u8,
+        metadata: Vec<u8>,
+    },
     Chat {
         message: String,
         position: i8,
@@ -21,6 +31,31 @@ pub enum McPacket {
         chunk_data: Vec<u8>,
         tile_entities: Vec<u8>,
     },
+    EntityRelativeMove {
+        eid: i32,
+        dx: f64,
+        dy: f64,
+        dz: f64,
+        on_ground: bool,
+    },
+    EntityLookAndRelativeMove {
+        eid: i32,
+        dx: f64,
+        dy: f64,
+        dz: f64,
+        yaw: u8,
+        pitch: u8,
+        on_ground: bool,
+    },
+    EntityTeleport {
+        eid: i32,
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: u8,
+        pitch: u8,
+        on_ground: bool,
+    },
     Unimplemented,
 }
 
@@ -28,6 +63,19 @@ impl McPacket {
     fn decode(data: &Vec<u8>) -> Result<McPacket, BufErr> {
         let mut data = BufReader::new(data.clone()); // TODO operate on data ref directly, no clone
         match data.read_u8()? {
+            0x05 => {
+                Ok(McPacket::SpawnPlayer {
+                    eid: data.read_varint()?,
+                    uuid: data.read_uuid()?,
+                    x: data.read_f64()?,
+                    y: data.read_f64()?,
+                    z: data.read_f64()?,
+                    yaw: data.read_u8()?,
+                    pitch: data.read_u8()?,
+                    metadata: data.read_remainder()?, // TODO custom format
+                })
+            }
+
             0x0f => {
                 let message_bytes = data.read_bytes_len_varint()?;
                 let message = ::std::str::from_utf8(&message_bytes)?.to_owned();
@@ -44,6 +92,40 @@ impl McPacket {
                     bitmask: data.read_u16()?,
                     chunk_data: data.read_bytes_len_varint()?,
                     tile_entities: data.read_remainder()?, // TODO read this many NBTs
+                })
+            }
+
+            0x26 => {
+                Ok(McPacket::EntityRelativeMove {
+                    eid: data.read_varint()?,
+                    dx: (data.read_i16()? as f64) / 4096_f64,
+                    dy: (data.read_i16()? as f64) / 4096_f64,
+                    dz: (data.read_i16()? as f64) / 4096_f64,
+                    on_ground: data.read_bool()?,
+                })
+            }
+
+            0x27 => {
+                Ok(McPacket::EntityLookAndRelativeMove {
+                    eid: data.read_varint()?,
+                    dx: (data.read_i16()? as f64) / 4096_f64,
+                    dy: (data.read_i16()? as f64) / 4096_f64,
+                    dz: (data.read_i16()? as f64) / 4096_f64,
+                    yaw: data.read_u8()?,
+                    pitch: data.read_u8()?,
+                    on_ground: data.read_bool()?,
+                })
+            }
+
+            0x4C => {
+                Ok(McPacket::EntityTeleport {
+                    eid: data.read_varint()?,
+                    x: data.read_f64()?,
+                    y: data.read_f64()?,
+                    z: data.read_f64()?,
+                    yaw: data.read_u8()?,
+                    pitch: data.read_u8()?,
+                    on_ground: data.read_bool()?,
                 })
             }
 
