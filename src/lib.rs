@@ -1,3 +1,6 @@
+extern crate byteorder;
+#[macro_use]
+extern crate error_chain;
 extern crate zip;
 
 use blocks::BLOCK_STRINGS_ARR;
@@ -6,7 +9,9 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
 pub mod blocks;
+pub mod buf_rw;
 pub mod colorizer;
+pub mod replay;
 pub mod tile;
 
 pub const CHUNK_WIDTH: usize = 16;
