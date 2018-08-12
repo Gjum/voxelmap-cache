@@ -1,21 +1,13 @@
 extern crate zip;
 
-use super::get_xz_from_tile_path;
+use super::{CHUNK_HEIGHT, CHUNK_WIDTH, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH};
 use blocks::AIR_STR;
-use std::collections::HashMap;
+use std::collections::{HashMap, LinkedList};
 use std::fmt;
 use std::fs;
+use std::num::ParseIntError;
 use std::path::PathBuf;
 
-pub const CHUNK_WIDTH: usize = 16;
-pub const CHUNK_HEIGHT: usize = 16;
-pub const CHUNK_BLOCKS: usize = CHUNK_WIDTH * CHUNK_HEIGHT;
-pub const CHUNKS_PER_TILE_WIDTH: usize = 16;
-pub const CHUNKS_PER_TILE_HEIGHT: usize = 16;
-pub const TILE_WIDTH: usize = CHUNKS_PER_TILE_WIDTH * CHUNK_WIDTH;
-pub const TILE_HEIGHT: usize = CHUNKS_PER_TILE_HEIGHT * CHUNK_HEIGHT;
-pub const TILE_COLUMNS: usize = TILE_WIDTH * TILE_HEIGHT;
-pub const TILE_CHUNKS: usize = CHUNKS_PER_TILE_WIDTH * CHUNKS_PER_TILE_HEIGHT;
 pub const COLUMN_BYTES: usize = 17;
 
 pub type TilePos = (i32, i32);
@@ -48,7 +40,8 @@ impl Tile {
 
 impl fmt::Debug for Tile {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        fmt.write_str(&format!(
+        write!(
+            fmt,
             "Tile with {} keys{}{}",
             self.keys.as_ref().map_or(0, |k| k.len()),
             match &self.pos {
@@ -59,7 +52,7 @@ impl fmt::Debug for Tile {
                 Some(source) => format!(" from {:?}", source),
                 None => "".to_owned(),
             },
-        ))
+        )
     }
 }
 
@@ -153,6 +146,81 @@ pub fn write_tile(tile_path: &PathBuf, tile: &Tile) -> Result<(), String> {
     zip_archive.finish().map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+pub fn get_xz_from_tile_path(tile_path: &PathBuf) -> Result<TilePos, String> {
+    let fname = tile_path.file_name().unwrap().to_str().unwrap();
+    if fname.len() <= 4 {
+        return Err("file name too short".to_owned());
+    }
+    let (coords_part, _) = fname.split_at(fname.len() - 4);
+    let mut it = coords_part.splitn(3, ',');
+    let x = it
+        .next()
+        .ok_or("no x coord in filename".to_owned())?
+        .parse()
+        .map_err(|e: ParseIntError| e.to_string())?;
+    let z = it
+        .next()
+        .ok_or("no z coord in filename".to_owned())?
+        .parse()
+        .map_err(|e: ParseIntError| e.to_string())?;
+    Ok((x, z))
+}
+
+pub fn get_contrib_from_tile_path(tile_path: &PathBuf) -> Result<String, String> {
+    let fname = tile_path.file_name().unwrap().to_str().unwrap();
+    if fname.len() <= 4 {
+        return Err("no contrib in filename".to_owned());
+    }
+    let (coords_part, _) = fname.split_at(fname.len() - 4);
+    Ok(coords_part
+        .splitn(3, ',')
+        .skip(2)
+        .next()
+        .unwrap()
+        .to_string())
+}
+
+pub fn get_tile_paths_in_dirs(
+    dirs: &Vec<String>,
+    verbose: bool,
+) -> Result<LinkedList<PathBuf>, String> {
+    let mut tile_paths = LinkedList::new();
+    for dir in dirs {
+        for zip_dir_entry in fs::read_dir(dir.as_str()).map_err(|e| e.to_string())? {
+            let tile_path = zip_dir_entry.map_err(|e| e.to_string())?.path();
+            match get_xz_from_tile_path(&tile_path) {
+                Ok(_pos) => {
+                    if tile_path.to_string_lossy().ends_with(".zip") {
+                        tile_paths.push_back(tile_path)
+                    } else {
+                        println!("Ignoring non-tile file {:?}", &tile_path);
+                    }
+                }
+                Err(e) => {
+                    if tile_path.to_string_lossy().ends_with("_chunk-times.gz") {
+                        // ignore chunk timestamp info file
+                    } else {
+                        if verbose {
+                            println!("Ignoring non-tile file {:?} {:?}", &tile_path, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(tile_paths)
+}
+
+pub fn is_tile_pos_in_bounds((tile_x, tile_z): (i32, i32), bounds: &Vec<i32>) -> bool {
+    let tw = TILE_WIDTH as i32;
+    let th = TILE_HEIGHT as i32;
+    let x = tile_x * tw;
+    let z = tile_z * th;
+    let (w, n, e, s) = (bounds[0], bounds[1], bounds[2], bounds[3]);
+
+    x + tw > w && x < e && z + th > n && z < s
 }
 
 #[cfg(test)]

@@ -12,13 +12,12 @@ use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
 use voxelmap_cache::tile::{
-    get_chunk_start, read_tile, write_tile, KeysMap, Tile, TilePos, CHUNK_HEIGHT, CHUNK_WIDTH,
-    COLUMN_BYTES, TILE_CHUNKS, TILE_COLUMNS, TILE_WIDTH,
+    get_chunk_start, get_contrib_from_tile_path, get_tile_paths_in_dirs, get_xz_from_tile_path,
+    is_tile_pos_in_bounds, read_tile, write_tile, KeysMap, Tile, TilePos, COLUMN_BYTES,
 };
 use voxelmap_cache::{
-    get_block_name_from_voxelmap, get_contrib_from_tile_path, get_mtime_or_0,
-    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, parse_bounds,
-    print_progress, PROGRESS_INTERVAL,
+    get_block_name_from_voxelmap, get_mtime_or_0, parse_bounds, print_progress, CHUNK_HEIGHT,
+    CHUNK_WIDTH, PROGRESS_INTERVAL, TILE_CHUNKS, TILE_COLUMNS, TILE_WIDTH,
 };
 
 const USAGE: &'static str = "

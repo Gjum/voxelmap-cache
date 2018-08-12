@@ -16,11 +16,11 @@ use threadpool::ThreadPool;
 use voxelmap_cache::blocks::BLOCK_STRINGS_ARR;
 use voxelmap_cache::colorizer::Colorizer;
 use voxelmap_cache::tile::{
-    read_tile, KeysMap, COLUMN_BYTES, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH,
+    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, read_tile, KeysMap,
+    COLUMN_BYTES,
 };
 use voxelmap_cache::{
-    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, parse_bounds,
-    print_progress, PROGRESS_INTERVAL,
+    parse_bounds, print_progress, PROGRESS_INTERVAL, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH,
 };
 
 const USAGE: &'static str = "
@@ -173,13 +173,13 @@ fn process_result(
     config: &OutputConfig,
 ) -> () {
     let (tile_path, result) = result_with_path;
-    let (x, z) = get_xz_from_tile_path(&tile_path).expect("Getting tile position");
-    let img_path = format!("{}/{:?},{:?}.png", config.output_path, x, z);
-
     if let Err(msg) = result {
         println!("Failed rendering tile {:?} {}", tile_path, msg);
         return;
     }
+
+    let (x, z) = get_xz_from_tile_path(&tile_path).expect("Getting tile position");
+    let img_path = format!("{}/{:?},{:?}.png", config.output_path, x, z);
 
     fs::create_dir_all(config.output_path).expect(&format!(
         "Creating containing directory for tile {}",
