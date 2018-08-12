@@ -8,7 +8,7 @@ extern crate zip;
 use docopt::Docopt;
 use voxelmap_cache::buf_rw::UUID;
 use voxelmap_cache::mc::packet::{ChunkData, McPacket};
-use voxelmap_cache::replay::read_replay;
+use voxelmap_cache::replay::{read_info, read_replay};
 
 const USAGE: &'static str = "
 Usage: replay [-q] [--filter=<ids>] [--follow=<uuid>] [--server=<address>] <path>
@@ -106,6 +106,19 @@ fn main() {
         }
     });
 
+    if let Some(ref address) = args.flag_server {
+        let replay_info = read_info(&args.arg_path).expect("Reading replay info");
+        if address != &replay_info.server_name {
+            if verbose {
+                eprintln!(
+                    "Skipping replay on wrong server {}",
+                    &replay_info.server_name
+                );
+            }
+            return;
+        }
+    }
+
     if let Some(ref player) = followed {
         if verbose {
             eprintln!(
@@ -126,18 +139,6 @@ fn main() {
             "from {} for {}ms with {} on {}",
             info.date, info.duration, info.mc_version, info.server_name,
         );
-    }
-
-    if let Some(ref address) = args.flag_server {
-        if address != &replay.info.server_name {
-            if verbose {
-                eprintln!(
-                    "Skipping replay on wrong server {}",
-                    &replay.info.server_name
-                );
-            }
-            return;
-        }
     }
 
     for mut packet in replay {

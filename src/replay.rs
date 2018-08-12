@@ -4,8 +4,10 @@ extern crate zip;
 
 use super::buf_rw::{BufErr, BufReader};
 use super::mc::packet::McPacket;
+use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use zip::ZipArchive;
 
 #[derive(Debug)]
 pub struct ReplayPacket {
@@ -39,7 +41,7 @@ pub struct ReplayInfo {
 
 pub struct Replay {
     pub info: ReplayInfo,
-    data: BufReader,
+    data: BufReader, // TODO lazy read
 }
 
 impl Iterator for Replay {
@@ -68,66 +70,28 @@ impl Iterator for Replay {
     }
 }
 
+pub fn read_info<P>(path: &P) -> Result<ReplayInfo, String>
+where
+    P: AsRef<Path>,
+{
+    let zip_file = File::open(&path).map_err(|e| e.to_string())?;
+    let mut zip_archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+    read_info_from_zip(&mut zip_archive)
+}
+
 pub fn read_replay<P>(path: &P) -> Result<Replay, String>
 where
     P: AsRef<Path>,
 {
-    use std::fs;
+    let zip_file = File::open(&path).map_err(|e| e.to_string())?;
+    let mut zip_archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
-    let zip_file = fs::File::open(&path).map_err(|e| e.to_string())?;
-    let mut zip_archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
-
-    let info = {
-        let mut info_file = zip_archive
-            .by_name("metaData.json")
-            .map_err(|_e| "No info file in tile zip")?;
-        let json: serde_json::Value =
-            serde_json::from_reader(info_file).map_err(|_e| "Malformed JSON in replay info")?;
-        let o: &serde_json::Map<String, serde_json::Value> =
-            json.as_object().ok_or("No object in replay info")?;
-
-        ReplayInfo {
-            date: o
-                .get("date")
-                .ok_or("No date in replay info")?
-                .as_i64()
-                .ok_or("Malformed date in replay info")? as usize,
-            duration: o
-                .get("duration")
-                .ok_or("No duration in replay info")?
-                .as_i64()
-                .ok_or("Malformed duration in replay info")? as usize,
-            mc_version: String::from(
-                o.get("mcversion")
-                    .ok_or("No mcversion in replay info")?
-                    .as_str()
-                    .ok_or("Malformed mcversion in replay info")?,
-            ),
-            server_name: String::from(
-                o.get("serverName")
-                    .ok_or("No serverName in replay info")?
-                    .as_str()
-                    .ok_or("Malformed serverName in replay info")?,
-            ),
-            players: o
-                .get("players")
-                .ok_or("No players in replay info")?
-                .as_array()
-                .ok_or("Malformed players in replay info")?
-                .iter()
-                .map(|v| {
-                    v.as_str()
-                        .map(String::from)
-                        .ok_or("Malformed serverName in replay info")
-                })
-                .collect::<Result<Vec<String>, &str>>()?,
-        }
-    };
+    let info = read_info_from_zip(&mut zip_archive)?;
 
     let data = {
         let mut data_file = zip_archive
             .by_name("recording.tmcpr")
-            .map_err(|_e| "No data file in tile zip")?;
+            .map_err(|_e| "No recording in mcpr")?;
         let mut data = vec![0; data_file.size() as usize];
         data_file.read_exact(&mut *data).map_err(|e| e.to_string())?;
         data
@@ -136,5 +100,52 @@ where
     Ok(Replay {
         info: info,
         data: BufReader::new(data),
+    })
+}
+
+fn read_info_from_zip(zip_archive: &mut ZipArchive<File>) -> Result<ReplayInfo, String> {
+    let info_file = zip_archive
+        .by_name("metaData.json")
+        .map_err(|_e| "No metadata in mcpr")?;
+    let json: serde_json::Value =
+        serde_json::from_reader(info_file).map_err(|_e| "Malformed JSON in replay info")?;
+    let o: &serde_json::Map<String, serde_json::Value> =
+        json.as_object().ok_or("No object in replay info")?;
+
+    Ok(ReplayInfo {
+        date: o
+            .get("date")
+            .ok_or("No date in replay info")?
+            .as_i64()
+            .ok_or("Malformed date in replay info")? as usize,
+        duration: o
+            .get("duration")
+            .ok_or("No duration in replay info")?
+            .as_i64()
+            .ok_or("Malformed duration in replay info")? as usize,
+        mc_version: String::from(
+            o.get("mcversion")
+                .ok_or("No mcversion in replay info")?
+                .as_str()
+                .ok_or("Malformed mcversion in replay info")?,
+        ),
+        server_name: String::from(
+            o.get("serverName")
+                .ok_or("No serverName in replay info")?
+                .as_str()
+                .ok_or("Malformed serverName in replay info")?,
+        ),
+        players: o
+            .get("players")
+            .ok_or("No players in replay info")?
+            .as_array()
+            .ok_or("Malformed players in replay info")?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(String::from)
+                    .ok_or("Malformed serverName in replay info")
+            })
+            .collect::<Result<Vec<String>, &str>>()?,
     })
 }
