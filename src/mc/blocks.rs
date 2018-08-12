@@ -1,4 +1,13 @@
-pub const AIR_STR: &str = "minecraft:air";
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub struct Block {
+    name: &'static str,
+}
+
+pub const AIR_STR: &'static str = "minecraft:air";
+
+pub const AIR: Block = Block { name: AIR_STR };
+
+pub const MISSING: Block = Block { name: "" };
 
 /*
 indices are id << 4 | meta
@@ -11,7 +20,7 @@ with open('test.rs','w') as f:
         print('"%s",' % ("minecraft:air" if i not in d else "minecraft:"+d[i]), file=f)
 ```
 */
-pub const BLOCK_STRINGS_ARR: [&str; 4096] = [
+pub const BLOCK_STRINGS_ARR: [&'static str; 4096] = [
 "minecraft:air",
 "minecraft:air",
 "minecraft:air",

@@ -3,14 +3,14 @@ extern crate byteorder;
 extern crate error_chain;
 extern crate zip;
 
-use blocks::BLOCK_STRINGS_ARR;
+use mc::blocks::BLOCK_STRINGS_ARR;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
-pub mod blocks;
 pub mod buf_rw;
 pub mod colorizer;
+pub mod mc;
 pub mod replay;
 pub mod tile;
 

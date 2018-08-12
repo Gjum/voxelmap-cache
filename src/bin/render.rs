@@ -13,7 +13,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::Instant;
 use threadpool::ThreadPool;
-use voxelmap_cache::blocks::BLOCK_STRINGS_ARR;
+use voxelmap_cache::mc::blocks::BLOCK_STRINGS_ARR;
 use voxelmap_cache::colorizer::Colorizer;
 use voxelmap_cache::tile::{
     get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, read_tile, KeysMap,

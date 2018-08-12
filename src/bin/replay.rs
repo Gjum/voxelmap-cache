@@ -7,7 +7,8 @@ extern crate zip;
 
 use docopt::Docopt;
 use voxelmap_cache::buf_rw::UUID;
-use voxelmap_cache::replay::{read_replay, McPacket};
+use voxelmap_cache::mc::packet::{ChunkData, McPacket};
+use voxelmap_cache::replay::read_replay;
 
 const USAGE: &'static str = "
 Usage: replay [-q] [--filter=<ids>] [--follow=<uuid>] [--server=<address>] <path>
@@ -123,10 +124,7 @@ fn main() {
         let info = &replay.info;
         eprintln!(
             "from {} for {}ms with {} on {}",
-            info.date,
-            info.duration,
-            info.mc_version,
-            info.server_name,
+            info.date, info.duration, info.mc_version, info.server_name,
         );
     }
 
@@ -171,7 +169,7 @@ fn main() {
             Some(McPacket::Chat { message, position }) => {
                 println!("{} chat {}: {}", &packet.date, position, message)
             }
-            Some(McPacket::ChunkData { x, z, is_new, .. }) => {
+            Some(McPacket::ChunkDataHack(ChunkData { x, z, is_new, .. })) => {
                 println!("{} chunk {},{} {}", &packet.date, x, z, is_new)
             }
 

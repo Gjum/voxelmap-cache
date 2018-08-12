@@ -70,7 +70,7 @@ impl BufReader {
         Ok(v)
     }
 
-    pub fn read_bytes_len_varint(&mut self) -> Result<Vec<u8>, BufErr> {
+    pub fn read_varint_prefixed_bytes(&mut self) -> Result<Vec<u8>, BufErr> {
         let size = self.read_varint()? as usize;
         let mut v = vec![0; size];
         self.c.read_exact(&mut v)?;

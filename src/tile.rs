@@ -1,7 +1,7 @@
 extern crate zip;
 
 use super::{CHUNK_HEIGHT, CHUNK_WIDTH, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH};
-use blocks::AIR_STR;
+use mc::blocks::AIR_STR;
 use std::collections::{HashMap, LinkedList};
 use std::fmt;
 use std::fs;
