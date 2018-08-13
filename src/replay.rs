@@ -9,6 +9,17 @@ use std::io::Read;
 use std::path::Path;
 use zip::ZipArchive;
 
+error_chain!{
+    types {
+        ReplayErr, ReplayErrorKind, ReplayResult;
+    }
+    foreign_links {
+        Buf(BufErr);
+        Io(::std::io::Error);
+        Zip(::zip::result::ZipError);
+    }
+}
+
 #[derive(Debug)]
 pub struct ReplayPacket {
     pub date: usize,
@@ -70,30 +81,30 @@ impl Iterator for Replay {
     }
 }
 
-pub fn read_info<P>(path: &P) -> Result<ReplayInfo, String>
+pub fn read_info<P>(path: &P) -> Result<ReplayInfo, ReplayErr>
 where
     P: AsRef<Path>,
 {
-    let zip_file = File::open(&path).map_err(|e| e.to_string())?;
-    let mut zip_archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+    let zip_file = File::open(&path)?;
+    let mut zip_archive = ZipArchive::new(zip_file)?;
     read_info_from_zip(&mut zip_archive)
 }
 
-pub fn read_replay<P>(path: &P) -> Result<Replay, String>
+pub fn read_replay<P>(path: &P) -> Result<Replay, ReplayErr>
 where
     P: AsRef<Path>,
 {
-    let zip_file = File::open(&path).map_err(|e| e.to_string())?;
-    let mut zip_archive = ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+    let zip_file = File::open(&path)?;
+    let mut zip_archive = ZipArchive::new(zip_file)?;
 
     let info = read_info_from_zip(&mut zip_archive)?;
 
     let data = {
         let mut data_file = zip_archive
             .by_name("recording.tmcpr")
-            .map_err(|_e| "No recording in mcpr")?;
+            .chain_err(|| "No recording in mcpr")?;
         let mut data = vec![0; data_file.size() as usize];
-        data_file.read_exact(&mut *data).map_err(|e| e.to_string())?;
+        data_file.read_exact(&mut *data)?;
         data
     };
 
@@ -103,12 +114,12 @@ where
     })
 }
 
-fn read_info_from_zip(zip_archive: &mut ZipArchive<File>) -> Result<ReplayInfo, String> {
+fn read_info_from_zip(zip_archive: &mut ZipArchive<File>) -> Result<ReplayInfo, ReplayErr> {
     let info_file = zip_archive
         .by_name("metaData.json")
-        .map_err(|_e| "No metadata in mcpr")?;
+        .chain_err(|| "No metadata in mcpr")?;
     let json: serde_json::Value =
-        serde_json::from_reader(info_file).map_err(|_e| "Malformed JSON in replay info")?;
+        serde_json::from_reader(info_file).chain_err(|| "Malformed JSON in replay info")?;
     let o: &serde_json::Map<String, serde_json::Value> =
         json.as_object().ok_or("No object in replay info")?;
 
