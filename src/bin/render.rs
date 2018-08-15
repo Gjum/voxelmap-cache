@@ -11,17 +11,14 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
-use std::time::Instant;
 use threadpool::ThreadPool;
-use voxelmap_cache::mc::blocks::BLOCK_STRINGS_ARR;
 use voxelmap_cache::colorizer::Colorizer;
+use voxelmap_cache::mc::blocks::BLOCK_STRINGS_ARR;
 use voxelmap_cache::tile::{
     get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, read_tile, KeysMap,
     COLUMN_BYTES,
 };
-use voxelmap_cache::{
-    parse_bounds, print_progress, PROGRESS_INTERVAL, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH,
-};
+use voxelmap_cache::{parse_bounds, ProgressTracker, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH};
 
 const USAGE: &'static str = "
 Usage: render [-q] [-t threads] [--between=<bounds>] <cache-path> <output-path> (simple | light | biome | height | height-bw | terrain)
@@ -82,8 +79,6 @@ struct OutputConfig<'a> {
 }
 
 fn main() {
-    let start_time = Instant::now();
-
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
@@ -114,6 +109,7 @@ fn main() {
     });
 
     let total_work = tile_paths.len();
+    let mut progress = ProgressTracker::new(total_work);
     if verbose {
         println!(
             "Rendering {:?} tiles to {:?}",
@@ -125,8 +121,6 @@ fn main() {
         colorizer: args.get_colorizer(),
         global_map: build_global_keys_map(),
     });
-
-    let mut next_msg_elapsed = PROGRESS_INTERVAL;
 
     let pool = ThreadPool::new(args.arg_threads.unwrap_or(4));
     let (tx, rx) = channel();
@@ -149,13 +143,14 @@ fn main() {
 
         process_result(result, &output_config);
 
+        progress.progress_to(work_done);
         if verbose {
-            print_progress(work_done, total_work, start_time, &mut next_msg_elapsed);
+            progress.print_progress();
         }
     }
 
     if verbose {
-        let time_total = start_time.elapsed();
+        let time_total = progress.elapsed();
         let total_min = time_total.as_secs() / 60;
         let total_sec = time_total.as_secs() % 60;
         let time_per_work_item = time_total / total_work as u32;

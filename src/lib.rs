@@ -6,7 +6,7 @@ extern crate zip;
 use mc::blocks::BLOCK_STRINGS_ARR;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 pub mod buf_rw;
 pub mod colorizer;
@@ -67,6 +67,43 @@ pub fn parse_bounds(bounds_str: &str) -> Result<Vec<i32>, String> {
 
 pub const PROGRESS_INTERVAL: u64 = 3;
 
+pub struct ProgressTracker {
+    pub done: usize,
+    pub total: usize,
+    pub start_time: Instant,
+    pub next_msg_elapsed: u64,
+}
+
+impl ProgressTracker {
+    pub fn new(total: usize) -> Self {
+        Self {
+            total: total,
+            start_time: Instant::now(),
+            done: 0,
+            next_msg_elapsed: PROGRESS_INTERVAL,
+        }
+    }
+    pub fn progress_by(&mut self, delta: usize) -> &mut Self {
+        self.done += delta;
+        self
+    }
+    pub fn progress_to(&mut self, delta: usize) -> &mut Self {
+        self.done = delta;
+        self
+    }
+    pub fn elapsed(&mut self) -> Duration {
+        self.start_time.elapsed()
+    }
+    pub fn print_progress(&mut self) {
+        print_progress(
+            self.done,
+            self.total,
+            self.start_time,
+            &mut self.next_msg_elapsed,
+        )
+    }
+}
+
 // TODO put more weight on recent measurements
 pub fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_elapsed: &mut u64) {
     if total <= 0 || done == 0 {
@@ -87,7 +124,7 @@ pub fn print_progress(done: usize, total: usize, start_time: Instant, next_msg_e
     let sec_left = elapsed as usize * work_left / done;
     let min = sec_left / 60;
     let sec = sec_left % 60;
-    println!("{}/{} processed, {}:{:02?} left", done, total, min, sec);
+    eprintln!("{}/{} processed, {}:{:02?} left", done, total, min, sec);
 }
 
 #[cfg(test)]

@@ -9,15 +9,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
-use std::time::Instant;
 use threadpool::ThreadPool;
 use voxelmap_cache::tile::{
     get_chunk_start, get_contrib_from_tile_path, get_tile_paths_in_dirs, get_xz_from_tile_path,
     is_tile_pos_in_bounds, read_tile, write_tile, KeysMap, Tile, TilePos, COLUMN_BYTES,
 };
 use voxelmap_cache::{
-    get_block_name_from_voxelmap, get_mtime_or_0, parse_bounds, print_progress, CHUNK_HEIGHT,
-    CHUNK_WIDTH, PROGRESS_INTERVAL, TILE_CHUNKS, TILE_COLUMNS, TILE_WIDTH,
+    get_block_name_from_voxelmap, get_mtime_or_0, parse_bounds, ProgressTracker, CHUNK_HEIGHT,
+    CHUNK_WIDTH, TILE_CHUNKS, TILE_COLUMNS, TILE_WIDTH,
 };
 
 const USAGE: &'static str = "
@@ -42,8 +41,6 @@ struct Args {
 }
 
 fn main() {
-    let start_time = Instant::now();
-
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
@@ -86,6 +83,7 @@ fn main() {
     });
 
     let total_work = paths_sorted.len();
+    let mut progress = ProgressTracker::new(total_work);
     if verbose {
         println!(
             "Merging {:?} tiles across {:?} tile positions into {:?}",
@@ -97,8 +95,6 @@ fn main() {
 
     let mut skipped_contribs = HashMap::new();
     let mut total_used = 0;
-
-    let mut next_msg_elapsed = PROGRESS_INTERVAL;
 
     let pool = ThreadPool::new(args.arg_threads.unwrap_or(4));
     let (tx, rx) = channel();
@@ -126,13 +122,14 @@ fn main() {
 
         total_used += used.len();
 
+        progress.progress_to(work_done);
         if verbose {
-            print_progress(work_done, total_work, start_time, &mut next_msg_elapsed);
+            progress.print_progress();
         }
     }
 
     if verbose {
-        let time_total = start_time.elapsed();
+        let time_total = progress.elapsed();
         let total_min = time_total.as_secs() / 60;
         let total_sec = time_total.as_secs() % 60;
         let time_per_work_item = time_total / total_used as u32;
