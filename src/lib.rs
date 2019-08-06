@@ -1,6 +1,8 @@
 extern crate byteorder;
 #[macro_use]
 extern crate error_chain;
+#[macro_use]
+extern crate lazy_static;
 extern crate zip;
 
 use mc::blocks::BLOCK_STRINGS_ARR;
@@ -8,7 +10,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
+pub mod biomes;
 pub mod buf_rw;
+pub mod ccnatural;
 pub mod colorizer;
 pub mod mc;
 pub mod replay;

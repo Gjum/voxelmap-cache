@@ -13,12 +13,14 @@ pub const COLUMN_BYTES: usize = 17;
 pub type TilePos = (i32, i32);
 pub type TileDataBytes = Vec<u8>;
 pub type KeysMap = HashMap<String, u16>;
+pub type NamesVec = Vec<String>;
 
 pub struct Tile {
     pub source: Option<PathBuf>,
     pub pos: Option<TilePos>,
     pub columns: TileDataBytes,
     pub keys: Option<KeysMap>,
+    pub names: Option<NamesVec>,
 }
 
 pub fn is_empty(column: &[u8], keys: Option<&KeysMap>) -> bool {
@@ -68,6 +70,7 @@ pub fn read_tile(tile_path: &PathBuf) -> Result<Box<Tile>, String> {
     let zip_file = fs::File::open(&tile_path).map_err(|e| e.to_string())?;
     let mut zip_archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
+    let mut max_key = 0;
     let keys = zip_archive.by_name("key").ok().map(|key_file| {
         let mut keys = Box::new(HashMap::new());
         // TODO which one is faster?
@@ -89,9 +92,20 @@ pub fn read_tile(tile_path: &PathBuf) -> Result<Box<Tile>, String> {
                 .next()
                 .expect("getting block name from key line split")
                 .to_string();
+            if max_key < block_nr {
+                max_key = block_nr;
+            }
             keys.insert(block_name, block_nr);
         }
         *keys
+    });
+    let names = keys.as_ref().map(|keys| {
+        let unknown_name = "?".to_string();
+        let mut names: NamesVec = vec![unknown_name; 1 + max_key as usize];
+        for (name, nr) in keys.iter() {
+            names[*nr as usize] = name.clone();
+        }
+        names
     });
 
     let mut columns = vec![0; TILE_COLUMNS * COLUMN_BYTES];
@@ -109,6 +123,7 @@ pub fn read_tile(tile_path: &PathBuf) -> Result<Box<Tile>, String> {
         pos: get_xz_from_tile_path(tile_path).ok(),
         columns: columns,
         keys: keys,
+        names: names,
     });
 
     Ok(tile)
@@ -195,7 +210,7 @@ pub fn get_tile_paths_in_dirs(
                     if tile_path.to_string_lossy().ends_with(".zip") {
                         tile_paths.push_back(tile_path)
                     } else {
-                        println!("Ignoring non-tile file {:?}", &tile_path);
+                        eprintln!("Ignoring non-tile file {:?}", &tile_path);
                     }
                 }
                 Err(e) => {
@@ -203,7 +218,7 @@ pub fn get_tile_paths_in_dirs(
                         // ignore chunk timestamp info file
                     } else {
                         if verbose {
-                            println!("Ignoring non-tile file {:?} {:?}", &tile_path, e);
+                            eprintln!("Ignoring non-tile file {:?} {:?}", &tile_path, e);
                         }
                     }
                 }
@@ -234,6 +249,7 @@ mod tests {
             pos: None,
             columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
             keys: None,
+            names: None,
         };
 
         let foo = 17 * (256 * 2 * 16 + 16);
@@ -252,12 +268,16 @@ mod tests {
         let mut in_keys = HashMap::new();
         in_keys.insert("test id 42".to_string(), 42);
         in_keys.insert("minecraft:air".to_string(), 123);
+        let mut in_names = vec!["?".to_string(); 124];
+        in_names[42] = "test id 42".to_string();
+        in_names[123] = "minecraft:air".to_string();
 
         let mut in_tile = Tile {
             source: None,
             pos: None,
             columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
             keys: Some(in_keys),
+            names: Some(in_names),
         };
 
         let foo = 17 * (256 * 2 * 16 + 16);

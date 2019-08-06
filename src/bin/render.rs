@@ -15,13 +15,13 @@ use threadpool::ThreadPool;
 use voxelmap_cache::colorizer::Colorizer;
 use voxelmap_cache::mc::blocks::BLOCK_STRINGS_ARR;
 use voxelmap_cache::tile::{
-    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, read_tile, KeysMap,
+    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, read_tile, KeysMap, NamesVec,
     COLUMN_BYTES,
 };
 use voxelmap_cache::{parse_bounds, ProgressTracker, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH};
 
 const USAGE: &'static str = "
-Usage: render [-q] [-t threads] [--between=<bounds>] <cache-path> <output-path> (simple | light | biome | height | height-bw | terrain)
+Usage: render [-q] [-t threads] [--between=<bounds>] <cache-path> <output-path> (simple | light | biome | height | height-bw | naturality | terrain)
 
 cache-path contains voxelmap caches in the format `<x>,<z>.zip`
 
@@ -47,6 +47,7 @@ struct Args {
     cmd_biome: bool,
     cmd_height: bool,
     cmd_height_bw: bool,
+    cmd_naturality: bool,
     cmd_terrain: bool,
     arg_threads: Option<usize>,
 }
@@ -57,10 +58,14 @@ impl Args {
             Colorizer::Simple
         } else if self.cmd_light {
             Colorizer::Light
+        } else if self.cmd_biome {
+            Colorizer::Biome
         } else if self.cmd_height {
             Colorizer::Height
         } else if self.cmd_height_bw {
             Colorizer::HeightBW
+        } else if self.cmd_naturality {
+            Colorizer::Naturality
         } else {
             panic!("Unknown colorizer selected")
         }
@@ -70,7 +75,8 @@ impl Args {
 #[derive(Debug)]
 struct RenderConfig {
     colorizer: Colorizer,
-    global_map: KeysMap,
+    global_keys: KeysMap,
+    global_names: NamesVec,
 }
 
 #[derive(Debug)]
@@ -86,12 +92,12 @@ fn main() {
 
     let tile_paths = get_tile_paths_in_dirs(&vec![args.arg_cache_path.clone()], verbose)
         .unwrap_or_else(|e| {
-            println!("Error while listing cache directory: {:?}", e);
+            eprintln!("Error while listing cache directory: {:?}", e);
             std::process::exit(1);
         });
 
     let bounds = parse_bounds(&args.flag_between).unwrap_or_else(|e| {
-        println!("Invalid arg: --between={} {}", &args.flag_between, e);
+        eprintln!("Invalid arg: --between={} {}", &args.flag_between, e);
         std::process::exit(1);
     });
 
@@ -101,7 +107,7 @@ fn main() {
         .collect();
 
     fs::create_dir_all(&args.arg_output_path).unwrap_or_else(|e| {
-        println!(
+        eprintln!(
             "Failed to create output directory {:?} {:?}",
             &args.arg_output_path, e
         );
@@ -111,7 +117,7 @@ fn main() {
     let total_work = tile_paths.len();
     let mut progress = ProgressTracker::new(total_work);
     if verbose {
-        println!(
+        eprintln!(
             "Rendering {:?} tiles to {:?}",
             total_work, &args.arg_output_path
         )
@@ -119,7 +125,8 @@ fn main() {
 
     let render_config = Arc::new(RenderConfig {
         colorizer: args.get_colorizer(),
-        global_map: build_global_keys_map(),
+        global_keys: build_global_keys_map(),
+        global_names: BLOCK_STRINGS_ARR.iter().map(|x| x.to_string()).collect(),
     });
 
     let pool = ThreadPool::new(args.arg_threads.unwrap_or(4));
@@ -156,7 +163,7 @@ fn main() {
         let time_per_work_item = time_total / total_work as u32;
         let tile_ms = time_per_work_item.as_secs() * 1_000
             + time_per_work_item.subsec_nanos() as u64 / 1_000_000;
-        println!(
+        eprintln!(
             "Done rendering. Took {}:{:02} for all {} tiles, {}ms per tile",
             total_min, total_sec, total_work, tile_ms,
         );
@@ -169,7 +176,7 @@ fn process_result(
 ) -> () {
     let (tile_path, result) = result_with_path;
     if let Err(msg) = result {
-        println!("Failed rendering tile {:?} {}", tile_path, msg);
+        eprintln!("Failed rendering tile {:?} {}", tile_path, msg);
         return;
     }
 
@@ -190,11 +197,12 @@ fn render_tile(tile_path: &PathBuf, config: &RenderConfig) -> Result<Vec<u32>, S
     let tile = read_tile(tile_path).map_err(|e| e.to_string())?;
     let mut pixbuf = vec![0_u32; TILE_COLUMNS];
 
-    let keys_map = tile.keys.as_ref().unwrap_or(&config.global_map);
-    let get_column_color = config.colorizer.get_column_color_fn();
+    let keys_map = tile.keys.as_ref().unwrap_or(&config.global_keys);
+    let names_vec = tile.names.as_ref().unwrap_or(&config.global_names);
 
+    let get_column_color = config.colorizer.get_column_color_fn();
     for (i, column) in tile.columns.chunks(COLUMN_BYTES).enumerate() {
-        pixbuf[i] = get_column_color(column, &keys_map);
+        pixbuf[i] = get_column_color(column, &keys_map, &names_vec);
     }
 
     Ok(pixbuf)
@@ -205,6 +213,7 @@ fn build_global_keys_map() -> KeysMap {
         BLOCK_STRINGS_ARR
             .iter()
             .enumerate()
+            .rev()
             .map(|(i, s)| (s.to_string(), i as u16)),
     )
 }

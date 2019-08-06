@@ -1,49 +1,81 @@
-// use biomes::BIOME_COLOR_TABLE;
+use biomes::BIOME_COLOR_TABLE;
+use ccnatural::{
+    get_naturality_color, Naturality, CCNATURAL_COLORS_BLOCK_BIOME, CCNATURAL_COLORS_BLOCK_DEFAULT,
+};
 use std::u16;
-use tile::{is_empty as is_empty_option, KeysMap};
+use tile::{is_empty as is_empty_option, KeysMap, NamesVec};
 
-fn is_empty(column: &[u8], keys: &KeysMap) -> bool {
+fn is_empty(column: &[u8], keys: &KeysMap, _names: &NamesVec) -> bool {
     is_empty_option(column, Some(keys))
 }
 
-fn is_water(column: &[u8], keys: &KeysMap) -> bool {
+fn is_water(column: &[u8], keys: &KeysMap, _names: &NamesVec) -> bool {
     let block_nr = (column[1] as u16) << 8 | (column[2] as u16);
     return block_nr == *keys.get("minecraft:water[level=0]").unwrap_or(&u16::MAX);
 }
 
-// pub fn biome(column: &[u8]) -> u32 {
-//     if is_empty(column, keys) {
-//         return 0;
-//     }
-//     let b = column[16];
-//     BIOME_COLOR_TABLE[b as usize]
-// }
+pub fn biome(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
+    if is_empty(column, keys, names) {
+        return 0;
+    }
+    let b = column[16];
+    BIOME_COLOR_TABLE[b as usize]
+}
 
+pub fn naturality(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
+    if is_empty(column, keys, names) {
+        return 0;
+    }
+    let biome = column[16];
 
+    let mut final_naturality = None;
+
+    for offset in 0..4 {
+        let block_nr = (column[1 + offset * 4] as u16) << 8 | (column[2 + offset * 4] as u16);
+        if block_nr != 0 {
+            let block_name_full = &names[block_nr as usize];
+            if block_name_full == "?UNKNOWN_BLOCK?" || block_name_full.ends_with(":air") {
+                continue;
+            }
+            let block_name_prefixed = block_name_full.split("[").next().unwrap();
+            let block_name_stem = block_name_prefixed.rsplit(":").next().unwrap();
+
+            let block_naturality = CCNATURAL_COLORS_BLOCK_BIOME
+                .get(&(block_name_stem, biome))
+                .or_else(|| CCNATURAL_COLORS_BLOCK_DEFAULT.get(&block_name_stem))
+                .unwrap_or(&Naturality::Unknown);
+            if final_naturality.is_none() || final_naturality.unwrap() < *block_naturality {
+                final_naturality = Some(*block_naturality);
+            }
+        }
+    }
+
+    final_naturality.map(|n| get_naturality_color(&n)).unwrap_or(0)
+}
 
 const S_WATER: u32 = 0xff_ff_c5_a6; // #a6c5ff
 const S_LAND: u32 = 0xff_dc_e4_e7; // #e7e4dc
 
-pub fn simple(column: &[u8], keys: &KeysMap) -> u32 {
-    if is_empty(column, keys) {
+pub fn simple(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
+    if is_empty(column, keys, names) {
         return 0;
     }
-    if is_water(column, keys) {
+    if is_water(column, keys, names) {
         return S_WATER;
     }
     return S_LAND;
 }
 
-pub fn light(column: &[u8], keys: &KeysMap) -> u32 {
-    if is_empty(column, keys) {
+pub fn light(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
+    if is_empty(column, keys, names) {
         return 0;
     }
     let bl = column[3] & 0xf;
     rgb(bl * 17, bl * 17, bl * 17)
 }
 
-pub fn height_bw(column: &[u8], keys: &KeysMap) -> u32 {
-    if is_empty(column, keys) {
+pub fn height_bw(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
+    if is_empty(column, keys, names) {
         return 0;
     }
     let mut h = column[0];
@@ -66,12 +98,12 @@ const MTN_LEVEL: u8 = 150;
 const MID_LEVEL: u8 = 100;
 const SEA_LEVEL: u8 = 64;
 
-fn height(column: &[u8], keys: &KeysMap) -> u32 {
-    if is_empty(column, keys) {
+fn height(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
+    if is_empty(column, keys, names) {
         return 0; // unpopulated
     }
 
-    if is_water(column, keys) {
+    if is_water(column, keys, names) {
         let sf = column[4]; // seafloor height
         if sf < SEA_LEVEL {
             interpolate(BLACK, SEA_COLOR, 0, SEA_LEVEL, sf)
@@ -134,21 +166,23 @@ fn rgb(r: u8, g: u8, b: u8) -> u32 {
 
 #[derive(Debug)]
 pub enum Colorizer {
-    // Biome,
+    Biome,
     Height,
     HeightBW,
     Light,
     Simple,
+    Naturality,
 }
 
 impl Colorizer {
-    pub fn get_column_color_fn(&self) -> Box<Fn(&[u8], &KeysMap) -> u32> {
+    pub fn get_column_color_fn(&self) -> Box<Fn(&[u8], &KeysMap, &NamesVec) -> u32> {
         Box::new(match *self {
-            // Colorizer::Biome => biome,
+            Colorizer::Biome => biome,
             Colorizer::Height => height,
             Colorizer::HeightBW => height_bw,
             Colorizer::Light => light,
             Colorizer::Simple => simple,
+            Colorizer::Naturality => naturality,
         })
     }
 }
