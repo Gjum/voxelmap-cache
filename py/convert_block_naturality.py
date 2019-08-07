@@ -31,7 +31,7 @@ primcats = {
 
 # print primary category
 
-print(*(
+print(*sorted(
     f'("{bl}", Naturality::{cat.capitalize()}),'
     for (bl, cat) in primcats.items()
 ), sep='\n')
@@ -44,7 +44,7 @@ print("""\
 
 # print non-primary block+biome to category mappings
 
-print(*(
+print(*sorted(
     f'(("{bl}", {bi}), Naturality::{cat.capitalize()}),'
     for (bl, cats) in blocks.items()
     for (cat, bis) in cats.items()
