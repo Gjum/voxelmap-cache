@@ -28,7 +28,7 @@ Utilities for VoxelMap and CivMap to merge and render region caches and map tile
   (`/gamerule doDaylightCycle false`, `/time set 6000`)
 - load the singleplayer world, pan around until all of the map is rendered
 - images will be created in `.minecraft/mods/VoxelMods/voxelMap/cache/WORLDNAME/Overworld (dimension 0)/images/z1/`
-- copy them to `/tiles/terrain/z0/` (CivMap uses different zoom numbers)
+- copy them to `tiles/terrain/z0/` (CivMap uses different zoom numbers)
 - run `cleanup.py` on them to remove the area you were standing in during rendering
 
 ## Scripts
