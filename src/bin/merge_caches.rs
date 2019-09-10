@@ -173,6 +173,7 @@ pub fn merge_all_tiles(
         source: None,
         pos: None,
         keys: Some(HashMap::new()),
+        names: None, // dummy
         columns: vec![0; TILE_COLUMNS * COLUMN_BYTES],
     });
 
@@ -348,12 +349,14 @@ mod tests {
             pos: None,
             columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
             keys: None,
+            names: None,
         };
         let mut out_tile = Tile {
             source: None,
             pos: None,
             columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
             keys: Some(HashMap::new()),
+            names: None, // dummy
         };
         let mut converter = vec![0; 4096];
 
@@ -410,12 +413,14 @@ mod tests {
             pos: None,
             columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
             keys: Some(in_keys),
+            names: None, // dummy
         };
         let mut out_tile = Tile {
             source: None,
             pos: None,
             columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
             keys: Some(HashMap::new()),
+            names: None, // dummy
         };
         let mut chunks_done = vec![false; TILE_CHUNKS];
 
