@@ -1,11 +1,12 @@
 extern crate docopt;
 extern crate lodepng;
-extern crate rustc_serialize;
+extern crate serde;
 extern crate threadpool;
 extern crate voxelmap_cache;
 extern crate zip;
 
 use docopt::Docopt;
+use serde::Deserialize;
 use std::fs;
 use std::iter::FromIterator;
 use std::path::PathBuf;
@@ -36,7 +37,7 @@ Options:
 
 // TODO allow output to be a .png (single output image)
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 struct Args {
     flag_between: String,
     arg_output_path: String,
@@ -86,7 +87,7 @@ struct OutputConfig<'a> {
 
 fn main() {
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
+        .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
     let verbose = !args.flag_quiet;
 

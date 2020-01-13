@@ -1,10 +1,11 @@
 extern crate docopt;
-extern crate rustc_serialize;
+extern crate serde;
 extern crate threadpool;
 extern crate voxelmap_cache;
 extern crate zip;
 
 use docopt::Docopt;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::path::PathBuf;
@@ -26,7 +27,7 @@ Options:
     -t, --threads       Number of threads to use for parallel processing
 ";
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 struct Args {
     arg_cache_path: String,
     flag_quiet: bool,
@@ -47,7 +48,7 @@ fn merge_biome_block_counts_into(counts: &mut BiomeBlockCounts, other: &BiomeBlo
 
 fn main() {
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
+        .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
     let verbose = !args.flag_quiet;
 

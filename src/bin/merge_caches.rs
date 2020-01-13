@@ -1,10 +1,11 @@
 extern crate docopt;
-extern crate rustc_serialize;
+extern crate serde;
 extern crate threadpool;
 extern crate voxelmap_cache;
 extern crate zip;
 
 use docopt::Docopt;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -31,7 +32,7 @@ Options:
                         format: w,n,e,s [default: -99999,-99999,99999,99999]
 ";
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 struct Args {
     flag_quiet: bool,
     arg_threads: Option<usize>,
@@ -42,7 +43,7 @@ struct Args {
 
 fn main() {
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
+        .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
     let verbose = !args.flag_quiet;
 

@@ -1,11 +1,12 @@
 extern crate docopt;
 extern crate lodepng;
-extern crate rustc_serialize;
+extern crate serde;
 extern crate threadpool;
 extern crate voxelmap_cache;
 extern crate zip;
 
 use docopt::Docopt;
+use serde::Deserialize;
 use voxelmap_cache::buf_rw::UUID;
 use voxelmap_cache::mc::packet::{ChunkData, McPacket};
 use voxelmap_cache::replay::{read_info, read_replay};
@@ -22,7 +23,7 @@ Options:
     --server=<address>  Ignore replays on other servers.
 ";
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 struct Args {
     flag_filter: Option<String>,
     flag_follow: Option<String>,
@@ -91,7 +92,7 @@ fn is_player_id(id: u8) -> bool {
 
 fn main() {
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
+        .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
     let verbose = !args.flag_quiet;
     let filter_ids = args.get_id_filter().expect("Malformed filter argument");
