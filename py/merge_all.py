@@ -1,6 +1,9 @@
 """
-python3 merge_all.py <out dir> <tagged contrib dir>
+NOTE: This file only serves as an example now.
+Do not use it, it is outdated and does not work correctly.
+Instead, use the `merge_all` Rust program.
 
+python3 merge_all.py <out dir> <tagged contrib dir>
 Merges all tagged tile cache files from <tagged contrib dir>
 into a single cache in <out dir> which then can be rendered using VoxelMap.
 

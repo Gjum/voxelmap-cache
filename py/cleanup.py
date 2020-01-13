@@ -2,14 +2,14 @@
 python3 cleanup.py <region files directory> [-f]
 
 Removes region files (cache, tile, chunk times) that are
-outside the 5000 blocks world border of DevotedMC 3.0.
+outside the 13000 blocks world border of CivClassic 2.0.
 
 Without -f, only lists the files being removed.
 With -f, removes them.
 """
 import os, sys
 
-radius = 52
+radius = 52 # 13312 blocks = 52 tiles * 256 blocks/tile
 
 to_remove = []
 cleaned_dir = sys.argv[1]

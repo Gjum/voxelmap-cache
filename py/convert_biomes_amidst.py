@@ -2,7 +2,7 @@
 python py/convert_biomes_amidst.py --rs --download > src/biomes.rs
 python py/convert_biomes_amidst.py --rs < biomes_amidst.csv > src/biomes.rs
 
-Gets the color info from the skiphs/AMIDST Github repo (--download flag)
+Gets the color info from the crbednarz/AMIDST Github repo (--download flag)
 or from a csv file, piped into stdin (format: id,name,red,green,blue,type).
 
 If --rs is supplied, prints header and footer of the color array,
@@ -13,7 +13,7 @@ import sys
 biome_colors = [0x88ff00ff for _ in range(256)]
 
 if '--download' in sys.argv[1:]:
-    url = 'https://raw.githubusercontent.com/skiphs/AMIDST/master/src/amidst/minecraft/Biome.java'
+    url = 'https://raw.githubusercontent.com/crbednarz/AMIDST/master/src/amidst/minecraft/Biome.java'
     print('// Colors taken from', url)
 
     import re

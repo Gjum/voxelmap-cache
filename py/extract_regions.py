@@ -3,28 +3,36 @@ Takes a source directory containing voxelmap region caches (<x>,<z>.zip)
 and creates hardlinks of them in the target directory,
 tagged with the source directory's name.
 
+Args: [-v] <main cache> <new cache> [new cache ...]
+
 Input examples:
 
-foo_2017-01-01/
-|- play.devotedmc.com/
-   |- world/
-   |  |- Overworld (dimension 0)/
-   |     |- <x>,<z>.zip           <-- this is what we want!
-   |- Overworld (dimension 0)/
-      |- <x>,<z>.zip              <-- looks very similar, but is not what we want!
+contribs/
+|- foo_2017-01-01/
+|  |- play.devotedmc.com/
+|     |- world/
+|     |  |- Overworld (dimension 0)/
+|     |     |- <x>,<z>.zip           <-- this is what we want!
+|     |- Overworld (dimension 0)/
+|     |  |- <x>,<z>.zip              <-- looks very similar, but is not what we want!
+|     |- nether/
+|        |- Overworld (dimension 0)/
+|           |- <x>,<z>.zip           <-- also not what we want!
+|- bar_2017-01-01/
+|  |- world/
+|     |- Overworld (dimension 0)/
+|        |- <x>,<z>.zip
+|- baz_2017-01-01_custom/
+|  |- Overworld (dimension 0)/
+|     |- <x>,<z>.zip
 
-bar_2017-01-01/
-|- world/
-   |- Overworld (dimension 0)/
-      |- <x>,<z>.zip
+Command example:
 
-baz_2017-01-01_custom/
-|- Overworld (dimension 0)/
-   |- <x>,<z>.zip
+python3 extract_regions.py extracted/ contribs/foo_2017-01-01/ contribs/bar_2017-01-01/ contribs/baz_2017-01-01_custom/
 
 Output format:
 
-contribs/
+extracted/
 |- <x>,<z>,foo_2017-01-01.zip
 |- <x>,<z>,bar_2017-01-01.zip
 |- <x>,<z>,baz_2017-01-01_custom.zip
