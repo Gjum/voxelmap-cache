@@ -80,7 +80,7 @@ python3 py/extract_regions.py extracted/ contrib/player_2018-08-04/ contrib/play
 
 Compile with:
 
-    cargo build --release merge_caches
+    cargo build --release --bin merge_caches
 
 Usage:
 
@@ -106,8 +106,8 @@ rm merged/current # delete old symlink
 ln -rs merged/2020-01-13/ merged/current
 
 # merge ALL extracted contributions
-# using `cargo run` compiles the program and then runs it, `--release` makes it run fast
-cargo run --release merge_caches merged/current/ extracted/
+# using `cargo run` compiles the program and then runs it, `--release` makes it run fast, `--bin merge_caches` selects this program only out of all the ones available
+cargo run --release --bin merge_caches merged/current/ extracted/
 ```
 
 ### Rendering tiles using VoxelMap
@@ -170,7 +170,7 @@ Available modes:
 
 Compile with:
 
-    cargo build --release render
+    cargo build --release --bin render
 
 Usage:
 
@@ -191,7 +191,7 @@ Options:
 Example:
 
 ```bash
-cargo run --release render merged/current tiles/height/z0 height
+cargo run --release --bin render merged/current tiles/height/z0 height
 ```
 
 ### build_night.py
@@ -247,6 +247,8 @@ Converts the color info into source code, sourcing it
 from the [crbednarz/AMIDST Github repo][amidst-biomecolors] (`--download` flag)
 or from a csv file, piped into stdin (format: `id,name,red,green,blue,type`).
 
+[amidst-biomecolors]: https://github.com/crbednarz/AMIDST/wiki/biomecolors
+
 If `--rs` is supplied, prints header and footer of the color array,
 so the output is a valid Rust file as required for `src/biomes.rs`.
 
@@ -255,5 +257,3 @@ so the output is a valid Rust file as required for `src/biomes.rs`.
 Sometimes Rust's zip reader can't open some region cache .zip files.
 This script re-zips every region in a way that Rust can read them,
 keeping their timestamps intact.
-
-[amidst-biomecolors]: https://github.com/crbednarz/AMIDST/wiki/biomecolors
