@@ -1,42 +1,160 @@
 extern crate zip;
 
-use super::{CHUNK_HEIGHT, CHUNK_WIDTH, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH};
-use mc::blocks::AIR_STR;
 use std::collections::{HashMap, LinkedList};
 use std::fmt;
 use std::fs;
 use std::num::ParseIntError;
 use std::path::PathBuf;
 
-pub const COLUMN_BYTES: usize = 17;
+pub const COLUMN_BYTES_OLD: usize = 17;
+pub const COLUMN_BYTES_MODERN: usize = 18;
+
+pub const TILE_WIDTH: usize = 256;
+pub const TILE_HEIGHT: usize = 256;
+pub const TILE_COLUMNS: usize = TILE_WIDTH * TILE_HEIGHT;
+
+pub const CHUNK_WIDTH: usize = 16;
+pub const CHUNK_HEIGHT: usize = 16;
+pub const CHUNK_COLUMNS: usize = CHUNK_WIDTH * CHUNK_HEIGHT;
+
+pub const TILE_CHUNKS: usize = TILE_COLUMNS / CHUNK_COLUMNS;
+
+const HEIGHTPOS: usize = 0;
+const BLOCKSTATEPOS: usize = 1;
+const LIGHTPOS: usize = 3;
+const OCEANFLOORHEIGHTPOS: usize = 4;
+const OCEANFLOORBLOCKSTATEPOS: usize = 5;
+const OCEANFLOORLIGHTPOS: usize = 7;
+const TRANSPARENTHEIGHTPOS: usize = 8;
+const TRANSPARENTBLOCKSTATEPOS: usize = 9;
+const TRANSPARENTLIGHTPOS: usize = 11;
+const FOLIAGEHEIGHTPOS: usize = 12;
+const FOLIAGEBLOCKSTATEPOS: usize = 13;
+const FOLIAGELIGHTPOS: usize = 15;
+const BIOMEIDPOS: usize = 16;
 
 pub type TilePos = (i32, i32);
-pub type TileDataBytes = Vec<u8>;
 pub type KeysMap = HashMap<String, u16>;
 pub type NamesVec = Vec<String>;
 
 pub struct Tile {
-    pub source: Option<PathBuf>,
+    // TODO make private
+    /// in v2 format (layer-then-coords)
+    pub data: Vec<u8>,
+    pub keys: KeysMap,
+    pub names: NamesVec,
     pub pos: Option<TilePos>,
-    pub columns: TileDataBytes,
-    pub keys: Option<KeysMap>,
-    pub names: Option<NamesVec>,
-}
-
-pub fn is_empty(column: &[u8], keys: Option<&KeysMap>) -> bool {
-    let height = column[0];
-    let block_nr = (column[1] as u16) << 8 | (column[2] as u16);
-    let is_air = block_nr == 0 || match keys {
-        Some(ref keys) => keys.get(AIR_STR).map_or(true, |air_nr| *air_nr == block_nr),
-        None => false,
-    };
-    return height == 0 && is_air;
+    pub source: Option<PathBuf>,
 }
 
 impl Tile {
-    pub fn is_unset(&self, column_start: usize) -> bool {
-        let column = &self.columns[column_start..column_start + COLUMN_BYTES];
-        return is_empty(column, self.keys.as_ref());
+    pub fn is_chunk_empty(&self, chunk_nr: usize) -> bool {
+        let column_nr = first_column_nr_of_chunk_nr(chunk_nr);
+        self.is_col_empty(column_nr)
+    }
+    pub fn is_col_empty(&self, column_nr: usize) -> bool {
+        self.get_height(column_nr) == 0
+            && self.get_biome_id(column_nr) == 0
+            && self.get_blockstate(column_nr) == 0
+    }
+
+    pub fn get_height(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, HEIGHTPOS)
+    }
+    pub fn get_blockstate(&self, column_nr: usize) -> u16 {
+        self.get_u16(column_nr, BLOCKSTATEPOS)
+    }
+    pub fn get_light(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, LIGHTPOS)
+    }
+    pub fn get_ocean_floor_height(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, OCEANFLOORHEIGHTPOS)
+    }
+    pub fn get_ocean_floor_blockstate(&self, column_nr: usize) -> u16 {
+        self.get_u16(column_nr, OCEANFLOORBLOCKSTATEPOS)
+    }
+    pub fn get_ocean_floor_light(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, OCEANFLOORLIGHTPOS)
+    }
+    pub fn get_transparent_height(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, TRANSPARENTHEIGHTPOS)
+    }
+    pub fn get_transparent_blockstate(&self, column_nr: usize) -> u16 {
+        self.get_u16(column_nr, TRANSPARENTBLOCKSTATEPOS)
+    }
+    pub fn get_transparent_light(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, TRANSPARENTLIGHTPOS)
+    }
+    pub fn get_foliage_height(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, FOLIAGEHEIGHTPOS)
+    }
+    pub fn get_foliage_blockstate(&self, column_nr: usize) -> u16 {
+        self.get_u16(column_nr, FOLIAGEBLOCKSTATEPOS)
+    }
+    pub fn get_foliage_light(&self, column_nr: usize) -> u8 {
+        self.get_u8(column_nr, FOLIAGELIGHTPOS)
+    }
+    pub fn get_biome_id(&self, column_nr: usize) -> u16 {
+        self.get_u16(column_nr, BIOMEIDPOS)
+    }
+
+    pub fn set_height(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, HEIGHTPOS, value);
+    }
+    pub fn set_blockstate(&mut self, column_nr: usize, id: u16) {
+        self.set_u16(column_nr, BLOCKSTATEPOS, id);
+    }
+    pub fn set_light(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, LIGHTPOS, value);
+    }
+    pub fn set_ocean_floor_height(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, OCEANFLOORHEIGHTPOS, value);
+    }
+    pub fn set_ocean_floor_blockstate(&mut self, column_nr: usize, id: u16) {
+        self.set_u16(column_nr, OCEANFLOORBLOCKSTATEPOS, id);
+    }
+    pub fn set_ocean_floor_light(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, OCEANFLOORLIGHTPOS, value);
+    }
+    pub fn set_transparent_height(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, TRANSPARENTHEIGHTPOS, value);
+    }
+    pub fn set_transparent_blockstate(&mut self, column_nr: usize, id: u16) {
+        self.set_u16(column_nr, TRANSPARENTBLOCKSTATEPOS, id);
+    }
+    pub fn set_transparent_light(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, TRANSPARENTLIGHTPOS, value);
+    }
+    pub fn set_foliage_height(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, FOLIAGEHEIGHTPOS, value);
+    }
+    pub fn set_foliage_blockstate(&mut self, column_nr: usize, id: u16) {
+        self.set_u16(column_nr, FOLIAGEBLOCKSTATEPOS, id);
+    }
+    pub fn set_foliage_light(&mut self, column_nr: usize, value: u8) {
+        self.set_u8(column_nr, FOLIAGELIGHTPOS, value);
+    }
+    pub fn set_biome_id(&mut self, column_nr: usize, value: u16) {
+        self.set_u16(column_nr, BIOMEIDPOS, value);
+    }
+
+    fn get_u8(&self, column_nr: usize, layer_nr: usize) -> u8 {
+        let index = column_nr + TILE_COLUMNS * layer_nr;
+        self.data[index]
+    }
+    fn get_u16(&self, column_nr: usize, layer_nr: usize) -> u16 {
+        let index = column_nr + TILE_COLUMNS * layer_nr;
+        (self.data[index] as u16) << 8 | (self.data[index + TILE_COLUMNS] as u16)
+    }
+
+    fn set_u8(&mut self, column_nr: usize, layer_offset: usize, value: u8) {
+        let index = column_nr + TILE_COLUMNS * layer_offset;
+        self.data[index] = value;
+    }
+    fn set_u16(&mut self, column_nr: usize, layer_offset: usize, value: u16) {
+        let index = column_nr + TILE_COLUMNS * layer_offset;
+        self.data[index] = (value >> 8) as u8;
+        self.data[index + TILE_COLUMNS] = value as u8;
     }
 }
 
@@ -45,7 +163,7 @@ impl fmt::Debug for Tile {
         write!(
             fmt,
             "Tile with {} keys{}{}",
-            self.keys.as_ref().map_or(0, |k| k.len()),
+            self.keys.len(),
             match &self.pos {
                 Some(pos) => format!(" at {:?}", pos),
                 None => "".to_owned(),
@@ -58,10 +176,13 @@ impl fmt::Debug for Tile {
     }
 }
 
-pub fn get_chunk_start(chunk_nr: usize) -> usize {
-    let chunk_start_col = (chunk_nr * CHUNK_WIDTH) % TILE_WIDTH
-        + (chunk_nr * CHUNK_WIDTH / TILE_WIDTH) * TILE_WIDTH * CHUNK_HEIGHT;
-    chunk_start_col * COLUMN_BYTES
+pub fn column_nr_of_pos(x: usize, z: usize) -> usize {
+    x + z * TILE_WIDTH
+}
+
+pub fn first_column_nr_of_chunk_nr(chunk_nr: usize) -> usize {
+    (chunk_nr * CHUNK_WIDTH) % TILE_WIDTH
+        + (chunk_nr * CHUNK_WIDTH / TILE_WIDTH) * TILE_WIDTH * CHUNK_HEIGHT
 }
 
 pub fn read_tile(tile_path: &PathBuf) -> Result<Box<Tile>, String> {
@@ -71,57 +192,55 @@ pub fn read_tile(tile_path: &PathBuf) -> Result<Box<Tile>, String> {
     let mut zip_archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
 
     let mut max_key = 0;
-    let keys = zip_archive.by_name("key").ok().map(|key_file| {
-        let mut keys = Box::new(HashMap::new());
-        // TODO which one is faster?
-        // let mut key_text = String::new();
-        // key_file.read_to_string(&mut key_text);
-        // for line in key_text.split("\r\n") {
-        for line in BufReader::new(key_file).lines() {
-            let line = line.unwrap();
-            if line.is_empty() {
-                continue;
+    let keys = zip_archive
+        .by_name("key")
+        .ok()
+        .map(|key_file| {
+            let mut keys = Box::new(HashMap::new());
+            for line in BufReader::new(key_file).lines() {
+                let line = line.unwrap();
+                if line.is_empty() {
+                    continue;
+                }
+                let mut split = line.split(" ");
+                let block_id = split
+                    .next()
+                    .expect("getting block num from key line split")
+                    .parse::<u16>()
+                    .expect("converting block num to int");
+                let block_name = split
+                    .next()
+                    .expect("getting block name from key line split")
+                    .to_string();
+                if max_key < block_id {
+                    max_key = block_id;
+                }
+                keys.insert(block_name, block_id);
             }
-            let mut split = line.split(" ");
-            let block_nr = split
-                .next()
-                .expect("getting block num from key line split")
-                .parse::<u16>()
-                .expect("converting block num to int");
-            let block_name = split
-                .next()
-                .expect("getting block name from key line split")
-                .to_string();
-            if max_key < block_nr {
-                max_key = block_nr;
-            }
-            keys.insert(block_name, block_nr);
-        }
-        *keys
-    });
-    let names = keys.as_ref().map(|keys| {
-        let unknown_name = "?".to_string();
-        let mut names: NamesVec = vec![unknown_name; 1 + max_key as usize];
-        for (name, nr) in keys.iter() {
-            names[*nr as usize] = name.clone();
-        }
-        names
-    });
+            *keys
+        })
+        .expect("XXX support old keyless format");
 
-    let mut columns = vec![0; TILE_COLUMNS * COLUMN_BYTES];
+    let unknown_name = "?".to_string();
+    let mut names: NamesVec = vec![unknown_name; 1 + max_key as usize];
+    for (name, nr) in keys.iter() {
+        names[*nr as usize] = name.clone();
+    }
+
+    let mut data = vec![0; TILE_COLUMNS * COLUMN_BYTES_MODERN];
     {
         let mut data_file = zip_archive
             .by_name("data")
             .map_err(|_e| "No data file in tile zip")?;
         data_file
-            .read_exact(&mut *columns)
+            .read_exact(&mut *data)
             .map_err(|e| e.to_string())?;
     }
 
     let tile = Box::new(Tile {
         source: Some(tile_path.clone()),
         pos: get_xz_from_tile_path(tile_path).ok(),
-        columns: columns,
+        data: data,
         keys: keys,
         names: names,
     });
@@ -138,23 +257,30 @@ pub fn write_tile(tile_path: &PathBuf, tile: &Tile) -> Result<(), String> {
     let options =
         zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
+    // we can only write version 2
+
+    zip_archive
+        .start_file("control", options)
+        .map_err(|e| e.to_string())?;
+    zip_archive
+        .write_all("version:2\r\n".as_bytes())
+        .map_err(|e| e.to_string())?;
+
     zip_archive
         .start_file("data", options)
         .map_err(|e| e.to_string())?;
     zip_archive
-        .write_all(&tile.columns)
+        .write_all(&tile.data)
         .map_err(|e| e.to_string())?;
 
     zip_archive
         .start_file("key", options)
         .map_err(|e| e.to_string())?;
 
-    if let Some(keys) = &tile.keys {
-        for (name, nr) in keys {
-            zip_archive
-                .write_fmt(format_args!("{} {}\r\n", nr, name))
-                .map_err(|e| e.to_string())?;
-        }
+    for (name, nr) in &tile.keys {
+        zip_archive
+            .write_fmt(format_args!("{} {}\r\n", nr, name))
+            .map_err(|e| e.to_string())?;
     }
 
     // Optionally finish the zip. (this is also done on drop)
@@ -193,7 +319,7 @@ pub fn get_contrib_from_tile_path(tile_path: &PathBuf) -> Result<String, String>
         .splitn(3, ',')
         .skip(2)
         .next()
-        .unwrap()
+        .ok_or("No contrib in tile name")?
         .to_string())
 }
 
@@ -236,63 +362,4 @@ pub fn is_tile_pos_in_bounds((tile_x, tile_z): (i32, i32), bounds: &Vec<i32>) ->
     let (w, n, e, s) = (bounds[0], bounds[1], bounds[2], bounds[3]);
 
     x + tw > w && x < e && z + th > n && z < s
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn is_unset_works_for_global_key() {
-        let mut in_tile = Tile {
-            source: None,
-            pos: None,
-            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
-            keys: None,
-            names: None,
-        };
-
-        let foo = 17 * (256 * 2 * 16 + 16);
-        in_tile.columns[foo + 0] = 2; // height
-        in_tile.columns[foo + 1] = 0;
-        in_tile.columns[foo + 2] = 42;
-        in_tile.columns[foo + 3] = 14; // light
-        in_tile.columns[foo + 16] = 23; // biome
-
-        assert_eq!(true, in_tile.is_unset(get_chunk_start(0)));
-        assert_eq!(false, in_tile.is_unset(get_chunk_start(33)));
-    }
-
-    #[test]
-    fn is_unset_works_for_tile_key() {
-        let mut in_keys = HashMap::new();
-        in_keys.insert("test id 42".to_string(), 42);
-        in_keys.insert("minecraft:air".to_string(), 123);
-        let mut in_names = vec!["?".to_string(); 124];
-        in_names[42] = "test id 42".to_string();
-        in_names[123] = "minecraft:air".to_string();
-
-        let mut in_tile = Tile {
-            source: None,
-            pos: None,
-            columns: vec![0_u8; TILE_COLUMNS * COLUMN_BYTES],
-            keys: Some(in_keys),
-            names: Some(in_names),
-        };
-
-        let foo = 17 * (256 * 2 * 16 + 16);
-        in_tile.columns[foo + 0] = 2; // height
-        in_tile.columns[foo + 1] = 0;
-        in_tile.columns[foo + 2] = 42;
-        in_tile.columns[foo + 3] = 14; // light
-        in_tile.columns[foo + 16] = 23; // biome
-
-        let bar = foo + 32;
-        in_tile.columns[bar + 1] = 0;
-        in_tile.columns[bar + 2] = 123;
-
-        assert_eq!(true, in_tile.is_unset(get_chunk_start(0))); // all-zeroes
-        assert_eq!(false, in_tile.is_unset(get_chunk_start(33))); // foo is set
-        assert_eq!(true, in_tile.is_unset(get_chunk_start(35))); // bar has air block
-    }
 }

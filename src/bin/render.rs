@@ -7,17 +7,17 @@ extern crate zip;
 
 use docopt::Docopt;
 use serde::Deserialize;
-use std::fs;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
+use std::{fs, time::Duration};
 use threadpool::ThreadPool;
 use voxelmap_cache::colorizer::Colorizer;
 use voxelmap_cache::mc::blocks::BLOCK_STRINGS_ARR;
 use voxelmap_cache::tile::{
-    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, read_tile, KeysMap, NamesVec,
-    COLUMN_BYTES,
+    get_tile_paths_in_dirs, get_xz_from_tile_path, is_tile_pos_in_bounds, read_tile, KeysMap,
+    NamesVec,
 };
 use voxelmap_cache::{parse_bounds, ProgressTracker, TILE_COLUMNS, TILE_HEIGHT, TILE_WIDTH};
 
@@ -161,7 +161,11 @@ fn main() {
         let time_total = progress.elapsed();
         let total_min = time_total.as_secs() / 60;
         let total_sec = time_total.as_secs() % 60;
-        let time_per_work_item = time_total / total_work as u32;
+        let time_per_work_item = if total_work == 0 {
+            Duration::from_millis(0)
+        } else {
+            time_total / total_work as u32
+        };
         let tile_ms = time_per_work_item.as_secs() * 1_000
             + time_per_work_item.subsec_nanos() as u64 / 1_000_000;
         eprintln!(
@@ -198,12 +202,9 @@ fn render_tile(tile_path: &PathBuf, config: &RenderConfig) -> Result<Vec<u32>, S
     let tile = read_tile(tile_path).map_err(|e| e.to_string())?;
     let mut pixbuf = vec![0_u32; TILE_COLUMNS];
 
-    let keys_map = tile.keys.as_ref().unwrap_or(&config.global_keys);
-    let names_vec = tile.names.as_ref().unwrap_or(&config.global_names);
-
     let get_column_color = config.colorizer.get_column_color_fn();
-    for (i, column) in tile.columns.chunks(COLUMN_BYTES).enumerate() {
-        pixbuf[i] = get_column_color(column, &keys_map, &names_vec);
+    for i in 0..TILE_COLUMNS {
+        pixbuf[i] = get_column_color(&tile, i);
     }
 
     Ok(pixbuf)

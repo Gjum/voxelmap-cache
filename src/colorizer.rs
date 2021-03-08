@@ -1,39 +1,37 @@
-use biomes::BIOME_COLOR_TABLE;
-use ccnatural::{
+use crate::biomes::BIOME_COLOR_TABLE;
+use crate::ccnatural::{
     get_naturality_color, Naturality, CCNATURAL_COLORS_BLOCK_BIOME, CCNATURAL_COLORS_BLOCK_DEFAULT,
 };
+use crate::tile::Tile;
+use std::convert::TryInto;
 use std::u16;
-use tile::{is_empty as is_empty_option, KeysMap, NamesVec};
 
-fn is_empty(column: &[u8], keys: &KeysMap, _names: &NamesVec) -> bool {
-    is_empty_option(column, Some(keys))
-}
-
-fn is_water(column: &[u8], keys: &KeysMap, _names: &NamesVec) -> bool {
-    let block_nr = (column[1] as u16) << 8 | (column[2] as u16);
-    return block_nr == *keys.get("minecraft:water[level=0]").unwrap_or(&u16::MAX);
-}
-
-pub fn biome(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
-    if is_empty(column, keys, names) {
+pub fn colorize_biome(tile: &Tile, column_nr: usize) -> u32 {
+    if tile.is_col_empty(column_nr) {
         return 0;
     }
-    let b = column[16];
+    let b = tile.get_biome_id(column_nr);
     BIOME_COLOR_TABLE[b as usize]
 }
 
-pub fn naturality(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
-    if is_empty(column, keys, names) {
+pub fn colorize_naturality(tile: &Tile, column_nr: usize) -> u32 {
+    if tile.is_col_empty(column_nr) {
         return 0;
     }
-    let biome = column[16];
+    let biome: u8 = tile.get_biome_id(column_nr).try_into().unwrap();
 
     let mut final_naturality = None;
 
-    for offset in 0..4 {
-        let block_nr = (column[1 + offset * 4] as u16) << 8 | (column[2 + offset * 4] as u16);
+    let steps_block_getters: Vec<fn(&Tile, usize) -> u16> = vec![
+        Tile::get_blockstate,
+        Tile::get_ocean_floor_blockstate,
+        Tile::get_transparent_blockstate,
+        Tile::get_foliage_blockstate,
+    ];
+    for get_block_nr in steps_block_getters {
+        let block_nr = get_block_nr(tile, column_nr);
         if block_nr != 0 {
-            let block_name_full = &names[block_nr as usize];
+            let block_name_full = &tile.names[block_nr as usize];
             if block_name_full == "?UNKNOWN_BLOCK?" || block_name_full.ends_with(":air") {
                 continue;
             }
@@ -50,35 +48,37 @@ pub fn naturality(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
         }
     }
 
-    final_naturality.map(|n| get_naturality_color(&n)).unwrap_or(0)
+    final_naturality
+        .map(|n| get_naturality_color(&n))
+        .unwrap_or(0)
 }
 
 const S_WATER: u32 = 0xff_ff_c5_a6; // #a6c5ff
 const S_LAND: u32 = 0xff_dc_e4_e7; // #e7e4dc
 
-pub fn simple(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
-    if is_empty(column, keys, names) {
+pub fn colorize_simple(tile: &Tile, column_nr: usize) -> u32 {
+    if tile.is_col_empty(column_nr) {
         return 0;
     }
-    if is_water(column, keys, names) {
+    if is_water(tile, column_nr) {
         return S_WATER;
     }
     return S_LAND;
 }
 
-pub fn light(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
-    if is_empty(column, keys, names) {
+pub fn colorize_light(tile: &Tile, column_nr: usize) -> u32 {
+    if tile.is_col_empty(column_nr) {
         return 0;
     }
-    let bl = column[3] & 0xf;
+    let bl = tile.get_light(column_nr) & 0xf;
     rgb(bl * 17, bl * 17, bl * 17)
 }
 
-pub fn height_bw(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
-    if is_empty(column, keys, names) {
+pub fn colorize_height_bw(tile: &Tile, column_nr: usize) -> u32 {
+    if tile.is_col_empty(column_nr) {
         return 0;
     }
-    let mut h = column[0];
+    let mut h = tile.get_height(column_nr);
     if h == 0 {
         h = 255 // 0 = 256 = actually at height limit
     }
@@ -98,13 +98,13 @@ const MTN_LEVEL: u8 = 150;
 const MID_LEVEL: u8 = 100;
 const SEA_LEVEL: u8 = 64;
 
-fn height(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
-    if is_empty(column, keys, names) {
+fn colorize_height(tile: &Tile, column_nr: usize) -> u32 {
+    if tile.is_col_empty(column_nr) {
         return 0; // unpopulated
     }
 
-    if is_water(column, keys, names) {
-        let sf = column[4]; // seafloor height
+    if is_water(tile, column_nr) {
+        let sf = tile.get_ocean_floor_height(column_nr);
         if sf < SEA_LEVEL {
             interpolate(BLACK, SEA_COLOR, 0, SEA_LEVEL, sf)
         } else {
@@ -114,7 +114,7 @@ fn height(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
         // land
 
         // surface height
-        let h = match column[0] {
+        let h = match tile.get_height(column_nr) {
             0 => 255, // wrapped around
             h => h,
         };
@@ -131,6 +131,15 @@ fn height(column: &[u8], keys: &KeysMap, names: &NamesVec) -> u32 {
             interpolate(WHITE, SKY_COLOR, HIGH_LEVEL, 255, h)
         }
     }
+}
+
+fn is_water(tile: &Tile, column_nr: usize) -> bool {
+    let block_nr = tile.get_blockstate(column_nr);
+    return block_nr
+        == *tile
+            .keys
+            .get("minecraft:water[level=0]")
+            .unwrap_or(&u16::MAX);
 }
 
 fn interpolate(col_start: u32, col_stop: u32, val_start: u8, val_stop: u8, val: u8) -> u32 {
@@ -175,14 +184,14 @@ pub enum Colorizer {
 }
 
 impl Colorizer {
-    pub fn get_column_color_fn(&self) -> Box<Fn(&[u8], &KeysMap, &NamesVec) -> u32> {
+    pub fn get_column_color_fn(&self) -> Box<dyn Fn(&Tile, usize) -> u32> {
         Box::new(match *self {
-            Colorizer::Biome => biome,
-            Colorizer::Height => height,
-            Colorizer::HeightBW => height_bw,
-            Colorizer::Light => light,
-            Colorizer::Simple => simple,
-            Colorizer::Naturality => naturality,
+            Colorizer::Biome => colorize_biome,
+            Colorizer::Height => colorize_height,
+            Colorizer::HeightBW => colorize_height_bw,
+            Colorizer::Light => colorize_light,
+            Colorizer::Naturality => colorize_naturality,
+            Colorizer::Simple => colorize_simple,
         })
     }
 }

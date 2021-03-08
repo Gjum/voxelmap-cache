@@ -7,15 +7,12 @@ extern crate zip;
 use docopt::Docopt;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
-use std::sync::Arc;
 use threadpool::ThreadPool;
-use voxelmap_cache::biomes::BIOME_NAMES;
-use voxelmap_cache::mc::blocks::BLOCK_STRINGS_ARR;
-use voxelmap_cache::tile::{get_tile_paths_in_dirs, read_tile, KeysMap, COLUMN_BYTES};
+use voxelmap_cache::tile::{get_tile_paths_in_dirs, read_tile, Tile};
 use voxelmap_cache::ProgressTracker;
+use voxelmap_cache::{biomes::BIOME_NAMES, tile::TILE_COLUMNS};
 
 const USAGE: &'static str = "
 Usage: blockcount [-q] [-t threads] <cache-path>
@@ -35,7 +32,7 @@ struct Args {
 }
 
 /// (biome, block) -> count
-type BiomeBlockCounts = HashMap<(u8, String), u32>;
+type BiomeBlockCounts = HashMap<(u16, String), usize>;
 
 fn new_biome_block_counts() -> BiomeBlockCounts {
     HashMap::new()
@@ -111,7 +108,10 @@ fn main() {
         let biome_name = BIOME_NAMES[*biome_id as usize];
         let rel_count = *count as f32 / biome_counts[*biome_id as usize] as f32;
         // println!("{}\t{}\t{:10}\t{}", biome_name, biome_id, count, block_name);
-        println!("{}\t{}\t{}\t{}\t{}", rel_count, count, block_name, biome_name, biome_id);
+        println!(
+            "{}\t{}\t{}\t{}\t{}",
+            rel_count, count, block_name, biome_name, biome_id
+        );
     }
 
     if verbose {
@@ -131,42 +131,22 @@ fn main() {
 // fn count_tile(tile_path: &PathBuf, global_keys_map: &KeysMap) -> Result<BiomeBlockCounts, String> {
 fn count_tile(tile_path: &PathBuf) -> Result<BiomeBlockCounts, String> {
     let tile = read_tile(tile_path).map_err(|e| e.to_string())?;
-    // let id_map = match tile.keys.as_ref() {
-    //     None => None,
-    //     Some(keys) => {
-    //         let mut id_map = HashMap::new();
-    //         for (name, block_nr) in keys.iter() {
-    //             let block_id = global_keys_map
-    //                 .get(name)
-    //                 .expect(format!("Getting block_id from name '{}'", name).as_str());
-    //             id_map.insert(block_nr, block_id);
-    //         }
-    //         Some(id_map)
-    //     }
-    // };
-    let names_map = tile.keys.as_ref().map(|keys| {
-        let mut names_map = HashMap::new();
-        for (name, nr) in keys.iter() {
-            names_map.insert(nr, name);
-        }
-        names_map
-    });
 
     let mut counts = new_biome_block_counts();
 
-    for column in tile.columns.chunks(COLUMN_BYTES) {
-        let biome = column[16];
-        for offset in 0..4 {
-            let block_nr = (column[1 + offset * 4] as u16) << 8 | (column[2 + offset * 4] as u16);
+    let steps_block_getters: Vec<fn(&Tile, usize) -> u16> = vec![
+        Tile::get_blockstate,
+        Tile::get_ocean_floor_blockstate,
+        Tile::get_transparent_blockstate,
+        Tile::get_foliage_blockstate,
+    ];
+
+    for column_nr in 0..TILE_COLUMNS {
+        let biome = tile.get_biome_id(column_nr);
+        for get_block_nr in &steps_block_getters {
+            let block_nr = get_block_nr(&tile, column_nr) as usize;
             if block_nr != 0 {
-                // let block_id = id_map
-                //     .as_ref()
-                //     .map_or(block_nr, |m| **m.get(&block_nr).unwrap());
-                let block_name_full = match names_map.as_ref() {
-                    Some(names) => names.get(&block_nr).unwrap(),
-                    None => BLOCK_STRINGS_ARR[block_nr as usize],
-                }
-                .to_string();
+                let block_name_full = tile.names.get(block_nr).unwrap().to_string();
                 let block_name_stem = block_name_full.split("[").next().unwrap().to_string();
 
                 *counts.entry((biome, block_name_stem)).or_insert(0) += 1;
@@ -176,13 +156,3 @@ fn count_tile(tile_path: &PathBuf) -> Result<BiomeBlockCounts, String> {
 
     Ok(counts)
 }
-
-// fn build_global_keys_map() -> KeysMap {
-//     KeysMap::from_iter(
-//         BLOCK_STRINGS_ARR
-//             .iter()
-//             .enumerate()
-//             .rev()
-//             .map(|(i, s)| (s.to_string(), i as u16)),
-//     )
-// }
