@@ -52,7 +52,7 @@ def hardlink_cache(main_cache, contrib, src_path, verbose):
     try:
         os.link(src_path, dest_path)
         mtime = os.path.getmtime(src_path)
-        os.utime(dest, (mtime, mtime))
+        os.utime(dest_path, (mtime, mtime))
     except FileExistsError:
         if verbose: print('! Skipping existing', src_path, dest_path)
     except Exception as e:
