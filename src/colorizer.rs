@@ -98,38 +98,40 @@ const MTN_LEVEL: u8 = 150;
 const MID_LEVEL: u8 = 100;
 const SEA_LEVEL: u8 = 64;
 
-fn colorize_height(tile: &Tile, column_nr: usize) -> u32 {
+pub fn colorize_height(tile: &Tile, column_nr: usize) -> u32 {
     if tile.is_col_empty(column_nr) {
         return 0; // unpopulated
     }
-
     if is_water(tile, column_nr) {
-        let sf = tile.get_ocean_floor_height(column_nr);
-        if sf < SEA_LEVEL {
-            interpolate(BLACK, SEA_COLOR, 0, SEA_LEVEL, sf)
-        } else {
-            SEA_COLOR
-        }
+        get_sea_color(tile.get_ocean_floor_height(column_nr))
     } else {
-        // land
+        get_land_color(tile.get_height(column_nr))
+    }
+}
 
-        // surface height
-        let h = match tile.get_height(column_nr) {
-            0 => 255, // wrapped around
-            h => h,
-        };
+pub fn get_sea_color(ocean_floor_height: u8) -> u32 {
+    if ocean_floor_height < SEA_LEVEL {
+        interpolate(BLACK, SEA_COLOR, 0, SEA_LEVEL, ocean_floor_height)
+    } else {
+        SEA_COLOR
+    }
+}
 
-        if h < SEA_LEVEL {
-            interpolate(BLACK, COAST_COLOR, 0, SEA_LEVEL, h)
-        } else if h < MID_LEVEL {
-            interpolate(COAST_COLOR, MID_COLOR, SEA_LEVEL, MID_LEVEL, h)
-        } else if h < MTN_LEVEL {
-            interpolate(MID_COLOR, MTN_COLOR, MID_LEVEL, MTN_LEVEL, h)
-        } else if h < HIGH_LEVEL {
-            interpolate(MTN_COLOR, WHITE, MTN_LEVEL, HIGH_LEVEL, h)
-        } else {
-            interpolate(WHITE, SKY_COLOR, HIGH_LEVEL, 255, h)
-        }
+pub fn get_land_color(surface_height: u8) -> u32 {
+    let h = match surface_height {
+        0 => 255, // wrapped around
+        h => h,
+    };
+    if h < SEA_LEVEL {
+        interpolate(BLACK, COAST_COLOR, 0, SEA_LEVEL, h)
+    } else if h < MID_LEVEL {
+        interpolate(COAST_COLOR, MID_COLOR, SEA_LEVEL, MID_LEVEL, h)
+    } else if h < MTN_LEVEL {
+        interpolate(MID_COLOR, MTN_COLOR, MID_LEVEL, MTN_LEVEL, h)
+    } else if h < HIGH_LEVEL {
+        interpolate(MTN_COLOR, WHITE, MTN_LEVEL, HIGH_LEVEL, h)
+    } else {
+        interpolate(WHITE, SKY_COLOR, HIGH_LEVEL, 255, h)
     }
 }
 
