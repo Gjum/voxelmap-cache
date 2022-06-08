@@ -64,7 +64,7 @@ def stitch_four(size, x, z, out_path, in_path):
     except Exception as e:
         print('Exception at', se_path, e)
 
-    out.thumbnail((256, 256))
+    out.thumbnail((size, size))
     #out.thumbnail((256, 256), Image.NEAREST)
     out.save(out_path, 'PNG')
 
